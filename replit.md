@@ -56,12 +56,16 @@ The application uses a **centralized state management** pattern:
 - **Enhanced Navigation**: Delete/Backspace keys for crop deletion
 - **Google Drive Integration**: Framework for uploading exported crops (requires API setup)
 - **Adaptive Naming System**: Smart naming that learns from user rename patterns and automatically applies them to future crops
+- **Continuous PDF Scrolling**: Seamless mouse-only navigation through entire PDF documents with all pages displayed continuously
+- **Advanced Text Search**: Full-text search with result highlighting and navigation between found instances
+- **Auto-Visualization Highlighting**: Automatic highlighting of scientific visualization keywords (fig, figure, plot, diagram, etc.) in blue
 
 ### Keyboard Shortcuts
 - **File Operations**: Ctrl+O (Open), Ctrl+U (URL Load), Ctrl+E (Export), Ctrl+G (Upload to Drive)
 - **View Controls**: Ctrl+Plus/Minus (Zoom), Ctrl+0 (Reset), Ctrl+W (Fit Width)
 - **Crop Management**: Ctrl+Z (Undo), Delete/Backspace (Remove Selected)
 - **Navigation**: Arrow keys, Page Up/Down, Home/End for page navigation
+- **Search Functions**: Ctrl+F (Focus Search), F3 (Next Result), Shift+F3 (Previous Result)
 
 ## External Dependencies
 

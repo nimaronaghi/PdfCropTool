@@ -36,6 +36,24 @@ class PDFViewerApp:
         self.learned_naming_pattern = ""  # Full learned pattern (e.g., "nima_Q{:04d}")
         self.naming_learning_enabled = True
         
+        # Continuous scrolling system
+        self.continuous_mode = True  # Enable continuous scrolling by default
+        self.page_positions = []  # Y positions of each page in continuous view
+        self.page_heights = []   # Height of each page
+        self.total_height = 0    # Total height of all pages
+        self.page_gap = 20       # Gap between pages in continuous mode
+        
+        # Text search system
+        self.search_results = []  # List of search result rectangles
+        self.current_search_index = 0  # Current highlighted search result
+        self.search_text = ""     # Current search term
+        
+        # Visualization keywords for auto-highlighting
+        self.viz_keywords = ['fig', 'Fig', 'figure', 'Figure', 'plot', 'Plot', 
+                           'diagram', 'Diagram', 'chart', 'Chart', 'graph', 'Graph',
+                           'image', 'Image', 'illustration', 'Illustration']
+        self.viz_highlights = []  # List of visualization highlight rectangles
+        
         self.setup_ui()
         self.setup_bindings()
         
@@ -125,6 +143,9 @@ class PDFViewerApp:
         
         # Setup control panels
         self.setup_control_panels()
+        
+        # Setup search bar
+        self.setup_search_bar()
         
         # Setup PDF viewer
         self.setup_pdf_viewer()
@@ -276,6 +297,39 @@ class PDFViewerApp:
         # Refresh mouse wheel bindings after all components are created
         if hasattr(self, '_bind_mousewheel_recursive'):
             self._bind_mousewheel_recursive(self.left_scroll_frame)
+    
+    def setup_search_bar(self):
+        """Setup the search bar in the right panel"""
+        # Search frame at the top of the right panel
+        search_frame = ttk.Frame(self.right_panel)
+        search_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Search input
+        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(5, 5))
+        
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
+        self.search_entry.bind('<Return>', self.search_text)
+        
+        # Search buttons
+        ttk.Button(search_frame, text="Search", command=self.search_text).pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(search_frame, text="Next", command=self.next_search_result).pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(search_frame, text="Prev", command=self.prev_search_result).pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(search_frame, text="Clear", command=self.clear_search).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Search status
+        self.search_status = ttk.Label(search_frame, text="", foreground="gray")
+        self.search_status.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # View mode toggle
+        ttk.Separator(search_frame, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=(10, 10))
+        
+        self.continuous_var = tk.BooleanVar(value=True)
+        continuous_check = ttk.Checkbutton(search_frame, text="Continuous Scroll", 
+                                         variable=self.continuous_var, 
+                                         command=self.toggle_view_mode)
+        continuous_check.pack(side=tk.LEFT)
         
     def setup_pdf_viewer(self):
         """Setup the PDF viewer canvas"""
@@ -414,11 +468,17 @@ class PDFViewerApp:
         # Update PDF info
         self.update_pdf_info(file_path)
         
-        # Render first page
-        self.render_current_page()
+        # Initialize view mode
+        if self.continuous_mode:
+            self.render_continuous_pages()
+        else:
+            self.render_current_page()
         
         # Update navigation
         self.update_navigation()
+        
+        # Auto-highlight visualization keywords
+        self.highlight_visualization_keywords()
         
     def _pdf_load_error_callback(self, error_msg):
         """Callback when PDF loading fails"""
@@ -441,7 +501,7 @@ class PDFViewerApp:
         self.info_text.config(state=tk.DISABLED)
         
     def render_current_page(self):
-        """Render the current PDF page"""
+        """Render the current PDF page (single page mode)"""
         if not self.pdf_document:
             return
             
@@ -486,6 +546,304 @@ class PDFViewerApp:
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to render page: {str(e)}")
+    
+    def render_continuous_pages(self):
+        """Render all pages continuously in a single scrollable view"""
+        if not self.pdf_document:
+            return
+            
+        try:
+            # Clear canvas
+            self.canvas.delete("all")
+            
+            # Reset position tracking
+            self.page_positions = []
+            self.page_heights = []
+            current_y = 0
+            
+            # Store page images to prevent garbage collection
+            self.page_images = []
+            
+            # Render each page
+            for page_num in range(len(self.pdf_document)):
+                page = self.pdf_document[page_num]
+                
+                # Calculate render matrix
+                matrix = fitz.Matrix(self.zoom_level * 2, self.zoom_level * 2)
+                
+                # Render page to pixmap
+                pix = page.get_pixmap(matrix=matrix, alpha=False)
+                
+                # Convert to PIL Image
+                img_data = pix.tobytes("ppm")
+                pil_image = Image.open(io.BytesIO(img_data))
+                
+                # Resize for display
+                display_width = int(pil_image.width * self.zoom_level)
+                display_height = int(pil_image.height * self.zoom_level)
+                display_image = pil_image.resize((display_width, display_height), Image.Resampling.LANCZOS)
+                
+                # Convert to PhotoImage and store
+                page_photo = ImageTk.PhotoImage(display_image)
+                self.page_images.append(page_photo)
+                
+                # Store page position
+                self.page_positions.append(current_y)
+                self.page_heights.append(display_height)
+                
+                # Create image on canvas
+                self.canvas.create_image(0, current_y, anchor=tk.NW, image=page_photo, 
+                                       tags=f"page_{page_num}")
+                
+                # Add page number label
+                self.canvas.create_text(10, current_y + 10, text=f"Page {page_num + 1}", 
+                                      anchor=tk.NW, fill="red", font=("Arial", 12, "bold"),
+                                      tags=f"page_label_{page_num}")
+                
+                # Move to next page position
+                current_y += display_height + self.page_gap
+            
+            # Store total height
+            self.total_height = current_y
+            
+            # Update scroll region
+            max_width = max(img.width() for img in self.page_images) if self.page_images else 800
+            self.canvas.configure(scrollregion=(0, 0, max_width, self.total_height))
+            
+            # Redraw crop rectangles
+            self.redraw_crop_rectangles()
+            
+            # Store current page DPI for extraction
+            self.page_dpi = 72 * 2
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to render continuous pages: {str(e)}")
+    
+    def toggle_view_mode(self):
+        """Toggle between continuous and single page view"""
+        self.continuous_mode = self.continuous_var.get()
+        
+        if not self.pdf_document:
+            return
+        
+        # Clear existing highlights
+        self.clear_search()
+        
+        # Re-render in new mode
+        if self.continuous_mode:
+            self.render_continuous_pages()
+        else:
+            self.render_current_page()
+        
+        # Reapply highlights
+        self.highlight_visualization_keywords()
+    
+    def search_text(self, event=None):
+        """Search for text in the PDF"""
+        search_term = self.search_var.get().strip()
+        
+        if not search_term or not self.pdf_document:
+            return
+        
+        # Clear previous search results
+        self.clear_search()
+        
+        self.search_text = search_term
+        self.search_results = []
+        
+        # Search through all pages
+        for page_num in range(len(self.pdf_document)):
+            page = self.pdf_document[page_num]
+            
+            # Search for text instances
+            text_instances = page.search_for(search_term)
+            
+            for inst in text_instances:
+                # Convert PDF coordinates to display coordinates
+                if self.continuous_mode:
+                    display_coords = self.pdf_to_continuous_coords(inst, page_num)
+                else:
+                    if page_num == self.current_page:
+                        display_coords = self.pdf_to_display_coords(inst)
+                    else:
+                        continue  # Skip non-visible pages in single page mode
+                
+                if display_coords:
+                    self.search_results.append({
+                        'coords': display_coords,
+                        'page': page_num,
+                        'pdf_coords': inst
+                    })
+        
+        # Highlight search results
+        self.highlight_search_results()
+        
+        # Update search status
+        if self.search_results:
+            self.current_search_index = 0
+            self.search_status.config(text=f"Found {len(self.search_results)} results")
+            self.scroll_to_search_result(0)
+        else:
+            self.search_status.config(text="No results found")
+    
+    def next_search_result(self):
+        """Navigate to next search result"""
+        if not self.search_results:
+            return
+        
+        self.current_search_index = (self.current_search_index + 1) % len(self.search_results)
+        self.scroll_to_search_result(self.current_search_index)
+    
+    def prev_search_result(self):
+        """Navigate to previous search result"""
+        if not self.search_results:
+            return
+        
+        self.current_search_index = (self.current_search_index - 1) % len(self.search_results)
+        self.scroll_to_search_result(self.current_search_index)
+    
+    def scroll_to_search_result(self, index):
+        """Scroll to a specific search result"""
+        if not self.search_results or index >= len(self.search_results):
+            return
+        
+        result = self.search_results[index]
+        coords = result['coords']
+        
+        # Calculate center position for scrolling
+        center_x = (coords[0] + coords[2]) / 2
+        center_y = (coords[1] + coords[3]) / 2
+        
+        # Get canvas dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        if canvas_width > 1 and canvas_height > 1:
+            # Get scroll region
+            scroll_region = self.canvas.cget("scrollregion").split()
+            if len(scroll_region) == 4:
+                total_width = float(scroll_region[2])
+                total_height = float(scroll_region[3])
+                
+                # Calculate scroll positions (0.0 to 1.0)
+                scroll_x = max(0, min(1, (center_x - canvas_width/2) / total_width))
+                scroll_y = max(0, min(1, (center_y - canvas_height/2) / total_height))
+                
+                # Scroll to position
+                self.canvas.xview_moveto(scroll_x)
+                self.canvas.yview_moveto(scroll_y)
+        
+        # Update status
+        self.search_status.config(text=f"Result {index + 1} of {len(self.search_results)}")
+        
+        # Highlight current result
+        self.highlight_search_results(current_index=index)
+    
+    def highlight_search_results(self, current_index=None):
+        """Highlight search results on canvas"""
+        # Remove previous search highlights
+        self.canvas.delete("search_highlight")
+        
+        for i, result in enumerate(self.search_results):
+            coords = result['coords']
+            
+            # Use different color for current result
+            if current_index is not None and i == current_index:
+                color = "red"
+                width = 3
+            else:
+                color = "yellow"
+                width = 2
+            
+            # Create highlight rectangle
+            self.canvas.create_rectangle(
+                coords[0], coords[1], coords[2], coords[3],
+                outline=color, fill="", width=width, 
+                tags="search_highlight"
+            )
+    
+    def highlight_visualization_keywords(self):
+        """Auto-highlight visualization keywords"""
+        if not self.pdf_document:
+            return
+        
+        # Clear previous viz highlights
+        self.canvas.delete("viz_highlight")
+        self.viz_highlights = []
+        
+        # Search for each visualization keyword
+        for keyword in self.viz_keywords:
+            for page_num in range(len(self.pdf_document)):
+                page = self.pdf_document[page_num]
+                
+                # Search for keyword instances
+                text_instances = page.search_for(keyword)
+                
+                for inst in text_instances:
+                    # Convert PDF coordinates to display coordinates
+                    if self.continuous_mode:
+                        display_coords = self.pdf_to_continuous_coords(inst, page_num)
+                    else:
+                        if page_num == self.current_page:
+                            display_coords = self.pdf_to_display_coords(inst)
+                        else:
+                            continue
+                    
+                    if display_coords:
+                        self.viz_highlights.append({
+                            'coords': display_coords,
+                            'page': page_num,
+                            'keyword': keyword
+                        })
+                        
+                        # Create highlight rectangle
+                        self.canvas.create_rectangle(
+                            display_coords[0], display_coords[1], 
+                            display_coords[2], display_coords[3],
+                            outline="blue", fill="lightblue", width=1, stipple="gray25",
+                            tags="viz_highlight"
+                        )
+    
+    def pdf_to_display_coords(self, pdf_rect):
+        """Convert PDF coordinates to display coordinates (single page mode)"""
+        if not hasattr(self, 'current_image'):
+            return None
+        
+        # Scale factor from PDF to display
+        scale_factor = self.zoom_level * 2
+        
+        return (
+            pdf_rect[0] * scale_factor,  # left
+            pdf_rect[1] * scale_factor,  # top
+            pdf_rect[2] * scale_factor,  # right
+            pdf_rect[3] * scale_factor   # bottom
+        )
+    
+    def pdf_to_continuous_coords(self, pdf_rect, page_num):
+        """Convert PDF coordinates to display coordinates (continuous mode)"""
+        if page_num >= len(self.page_positions):
+            return None
+        
+        # Scale factor from PDF to display
+        scale_factor = self.zoom_level * 2
+        
+        # Get page position offset
+        page_y_offset = self.page_positions[page_num]
+        
+        return (
+            pdf_rect[0] * scale_factor,  # left
+            pdf_rect[1] * scale_factor + page_y_offset,  # top (with page offset)
+            pdf_rect[2] * scale_factor,  # right
+            pdf_rect[3] * scale_factor + page_y_offset   # bottom (with page offset)
+        )
+    
+    def clear_search(self):
+        """Clear search results and highlights"""
+        self.search_results = []
+        self.current_search_index = 0
+        self.search_text = ""
+        self.search_status.config(text="")
+        self.canvas.delete("search_highlight")
             
     def update_navigation(self):
         """Update navigation controls"""
@@ -647,19 +1005,28 @@ class PDFViewerApp:
     def zoom_in(self):
         """Zoom in"""
         self.zoom_level = min(self.zoom_level * 1.25, 5.0)
-        self.render_current_page()
+        if self.continuous_mode:
+            self.render_continuous_pages()
+        else:
+            self.render_current_page()
         self.update_navigation()
         
     def zoom_out(self):
         """Zoom out"""
         self.zoom_level = max(self.zoom_level / 1.25, 0.1)
-        self.render_current_page()
+        if self.continuous_mode:
+            self.render_continuous_pages()
+        else:
+            self.render_current_page()
         self.update_navigation()
         
     def reset_zoom(self):
         """Reset zoom to 100%"""
         self.zoom_level = 1.0
-        self.render_current_page()
+        if self.continuous_mode:
+            self.render_continuous_pages()
+        else:
+            self.render_current_page()
         self.update_navigation()
         
     def fit_to_width(self):
@@ -673,7 +1040,10 @@ class PDFViewerApp:
         
         if canvas_width > 100:  # Avoid division by very small numbers
             self.zoom_level = (canvas_width - 20) / page_width  # 20px margin
-            self.render_current_page()
+            if self.continuous_mode:
+                self.render_continuous_pages()
+            else:
+                self.render_current_page()
             self.update_navigation()
             
     def start_crop(self, event):
@@ -765,34 +1135,50 @@ class PDFViewerApp:
         self.canvas.delete("saved_crop")
         
         for i, crop in enumerate(self.crop_selections):
-            if crop['page'] == self.current_page:
-                # Convert PDF coordinates back to current display coordinates for drawing
-                if 'pdf_coords' in crop:
-                    pdf_coords = crop['pdf_coords']
-                    current_scale = self.zoom_level * 2.0
-                    
-                    # Convert PDF coords to current display coords
+            # Convert PDF coordinates back to current display coordinates for drawing
+            if 'pdf_coords' in crop:
+                pdf_coords = crop['pdf_coords']
+                current_scale = self.zoom_level * 2.0
+                crop_page = crop['page']
+                
+                # Calculate display coordinates based on view mode
+                if self.continuous_mode:
+                    # Continuous mode: use page offset
+                    if crop_page < len(self.page_positions):
+                        page_y_offset = self.page_positions[crop_page]
+                        left = pdf_coords[0] * current_scale
+                        top = pdf_coords[1] * current_scale + page_y_offset
+                        right = pdf_coords[2] * current_scale
+                        bottom = pdf_coords[3] * current_scale + page_y_offset
+                    else:
+                        continue  # Skip if page position not available
+                else:
+                    # Single page mode: only show crops for current page
+                    if crop_page != self.current_page:
+                        continue
                     left = pdf_coords[0] * current_scale
                     top = pdf_coords[1] * current_scale
                     right = pdf_coords[2] * current_scale
                     bottom = pdf_coords[3] * current_scale
-                else:
-                    # Legacy format - use stored display coordinates (may be inaccurate after zoom changes)
-                    coords = crop['coords']
-                    left, top, right, bottom = coords
-                
-                rect = self.canvas.create_rectangle(
-                    left, top, right, bottom,
-                    outline="blue", width=2, tags="saved_crop"
-                )
-                
-                # Add crop number label
-                center_x = (left + right) / 2
-                center_y = top + 15
-                self.canvas.create_text(
-                    center_x, center_y, text=f"#{i+1}",
-                    fill="blue", font=("Arial", 10, "bold"), tags="saved_crop"
-                )
+            else:
+                # Legacy format - use stored display coordinates (may be inaccurate after zoom changes)
+                if not self.continuous_mode and crop['page'] != self.current_page:
+                    continue
+                coords = crop['coords']
+                left, top, right, bottom = coords
+            
+            rect = self.canvas.create_rectangle(
+                left, top, right, bottom,
+                outline="blue", width=2, tags="saved_crop"
+            )
+            
+            # Add crop number label
+            center_x = (left + right) / 2
+            center_y = top + 15
+            self.canvas.create_text(
+                center_x, center_y, text=f"#{i+1}",
+                fill="blue", font=("Arial", 10, "bold"), tags="saved_crop"
+            )
                 
     def select_output_directory(self):
         """Select output directory for exported images"""
@@ -1245,6 +1631,11 @@ class PDFViewerApp:
         self.root.bind('<Control-z>', lambda e: self.undo_last_crop())
         self.root.bind('<Delete>', lambda e: self.delete_selected_crop())
         self.root.bind('<BackSpace>', lambda e: self.delete_selected_crop())
+        
+        # Search operations
+        self.root.bind('<Control-f>', lambda e: self.search_entry.focus())
+        self.root.bind('<F3>', lambda e: self.next_search_result())
+        self.root.bind('<Shift-F3>', lambda e: self.prev_search_result())
         
         # Navigation shortcuts
         self.root.bind("<Left>", lambda e: self.previous_page())
