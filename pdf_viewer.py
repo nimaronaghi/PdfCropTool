@@ -176,10 +176,7 @@ class PDFViewerApp:
         # View menu
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
-        view_menu.add_command(label="Zoom In", command=self.zoom_in, accelerator="Ctrl++")
-        view_menu.add_command(label="Zoom Out", command=self.zoom_out, accelerator="Ctrl+-")
-        view_menu.add_command(label="Fit to Width", command=self.fit_to_width, accelerator="Ctrl+W")
-        view_menu.add_command(label="Reset Zoom", command=self.reset_zoom, accelerator="Ctrl+0")
+        # Zoom commands removed - functionality disabled to fix display issues
         
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
@@ -257,19 +254,7 @@ class PDFViewerApp:
         # Future: Add thumbnails view button
         # ttk.Button(status_frame, text="Thumbnails", command=self.show_thumbnails).pack(side=tk.RIGHT)
         
-        # Zoom frame
-        zoom_frame = ttk.LabelFrame(self.left_panel, text="Zoom", padding=10)
-        zoom_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        zoom_buttons = ttk.Frame(zoom_frame)
-        zoom_buttons.pack(fill=tk.X)
-        
-        ttk.Button(zoom_buttons, text="−", command=self.zoom_out, width=3).pack(side=tk.LEFT)
-        self.zoom_label = ttk.Label(zoom_buttons, text="100%")
-        self.zoom_label.pack(side=tk.LEFT, expand=True)
-        ttk.Button(zoom_buttons, text="+", command=self.zoom_in, width=3).pack(side=tk.RIGHT)
-        
-        ttk.Button(zoom_frame, text="Fit to Width", command=self.fit_to_width).pack(fill=tk.X, pady=(5, 0))
+        # Zoom frame removed - functionality disabled to fix display issues
         
         # Crop frame
         self.crop_frame = CropFrame(self.left_panel, self)
@@ -778,8 +763,7 @@ class PDFViewerApp:
         self.next_btn.config(state=tk.NORMAL if self.current_page < total_pages - 1 else tk.DISABLED)
         self.last_btn.config(state=tk.NORMAL if self.current_page < total_pages - 1 else tk.DISABLED)
         
-        # Update zoom label
-        self.zoom_label.config(text=f"{int(self.zoom_level * 100)}%")
+        # Zoom label removed with zoom functionality
         
     def previous_page(self):
         """Go to previous page"""
@@ -909,49 +893,8 @@ class PDFViewerApp:
             self.page_entry.focus()
             self.page_entry.select_range(0, tk.END)
             
-    def zoom_in(self):
-        """Zoom in"""
-        self.zoom_level = min(self.zoom_level * 1.25, 5.0)
-        if self.continuous_mode:
-            self.render_continuous_pages()
-        else:
-            self.render_current_page()
-        self.update_navigation()
-        
-    def zoom_out(self):
-        """Zoom out"""
-        self.zoom_level = max(self.zoom_level / 1.25, 0.1)
-        if self.continuous_mode:
-            self.render_continuous_pages()
-        else:
-            self.render_current_page()
-        self.update_navigation()
-        
-    def reset_zoom(self):
-        """Reset zoom to 100%"""
-        self.zoom_level = 1.0
-        if self.continuous_mode:
-            self.render_continuous_pages()
-        else:
-            self.render_current_page()
-        self.update_navigation()
-        
-    def fit_to_width(self):
-        """Fit page to canvas width"""
-        if not self.pdf_document:
-            return
-            
-        canvas_width = self.canvas.winfo_width()
-        page = self.pdf_document[self.current_page]
-        page_width = page.rect.width
-        
-        if canvas_width > 100:  # Avoid division by very small numbers
-            self.zoom_level = (canvas_width - 20) / page_width  # 20px margin
-            if self.continuous_mode:
-                self.render_continuous_pages()
-            else:
-                self.render_current_page()
-            self.update_navigation()
+    # Zoom functionality removed - was causing display issues
+    # Cropping system now works at fixed 1.0 zoom level for reliability
             
     def start_crop(self, event):
         """Start crop selection"""
@@ -1560,12 +1503,7 @@ class PDFViewerApp:
 
         self.root.bind('<Control-q>', lambda e: self.root.quit())
         
-        # View operations
-        self.root.bind('<Control-equal>', lambda e: self.zoom_in())  # Ctrl+= (same key as +)
-        self.root.bind('<Control-plus>', lambda e: self.zoom_in())   # Ctrl++ if available
-        self.root.bind('<Control-minus>', lambda e: self.zoom_out())
-        self.root.bind('<Control-0>', lambda e: self.reset_zoom())
-        self.root.bind('<Control-w>', lambda e: self.fit_to_width())
+        # View operations - zoom shortcuts removed
         
         # Crop operations
         self.root.bind('<Control-z>', lambda e: self.undo_last_crop())

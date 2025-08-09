@@ -1,92 +1,147 @@
 # PDF Figure Extractor
 
-## Overview
+A powerful desktop application for extracting high-quality figures and images from PDF documents with precision cropping and intelligent naming features.
 
-PDF Figure Extractor is a desktop application built for Windows that enables users to extract high-quality figures and images from PDF documents. The application provides an interactive PDF viewer with cropping capabilities, allowing users to select specific regions of PDF pages and extract them as high-DPI images. The tool is designed for researchers, students, and professionals who need to extract figures from academic papers, reports, or other PDF documents while maintaining image quality.
+## Features
 
-## User Preferences
+- **Interactive PDF Viewer**: Navigate through PDF pages with intuitive controls
+- **Precision Cropping**: Select and extract specific regions from PDF pages
+- **Adaptive Naming System**: Automatically learns your naming patterns from the first renamed crop
+- **High-Quality Output**: Extracts images at 300+ DPI for publication-ready quality
+- **Flexible Export Options**: Save individual crops or batch export all selections
+- **Multiple View Modes**: Single-page or continuous scrolling view
+- **Auto-Highlighting**: Optionally highlight visualization keywords (figure, plot, diagram, etc.)
+- **Smart Navigation**: Keyboard shortcuts and direct page jumping
 
-Preferred communication style: Simple, everyday language.
+## Quick Start
 
-## System Architecture
+### Prerequisites
 
-### Frontend Architecture
-The application uses a **desktop GUI architecture** built with Python's Tkinter framework. The UI follows a modular component-based design pattern with separate classes for different interface elements:
+- Python 3.10 or later
+- Windows, macOS, or Linux
 
-- **Main Application Controller** (`PDFViewerApp`): Central application logic and state management
-- **Reusable UI Components** (`ui_components.py`): Modular widgets for crop management, naming patterns, and controls
-- **Component Separation**: Each UI component is encapsulated in its own class for maintainability and reusability
+### Installation & Running
 
-The UI layout uses a **two-panel design** with a left control panel for settings and crop management, and a right panel for PDF display and interaction. The navigation system provides comprehensive page control including direct page input, first/last page buttons, and real-time input validation.
+1. **Download the project files** to your computer
+2. **Install dependencies**:
+   ```bash
+   pip install fitz pillow pyinstaller pymupdf
+   ```
+3. **Run the application**:
+   ```bash
+   python main.py
+   ```
 
-### PDF Processing Architecture
-The application employs a **document processing pipeline** using PyMuPDF (fitz) as the core PDF engine:
+That's it! The application window will open ready to use.
 
-- **Document Loading**: Direct PDF document object handling for efficient memory usage
-- **Page Rendering**: On-demand page rendering with caching for performance
-- **High-DPI Extraction**: Dynamic scaling calculations to ensure extracted images maintain quality at 300+ DPI
-- **Coordinate Transformation**: Conversion between display coordinates and PDF native coordinates for accurate cropping
+## How to Use
 
-### Image Extraction System
-The image extraction follows a **quality-first approach**:
+### Loading a PDF
+- **File → Open PDF** or press `Ctrl+O`
+- **File → Load from URL** or press `Ctrl+U` (for Google Drive links, etc.)
 
-- **Adaptive Scaling**: Automatically calculates optimal extraction resolution based on source content
-- **Native Resolution Preservation**: Extracts at PDF native resolution or higher to maintain quality
-- **PIL Integration**: Uses Pillow (PIL) for final image processing and format conversion
-- **Dual Save Options**: Both batch export to specified directory and individual crop saving with custom filenames/locations
-- **Resolution Verification**: Real-time DPI calculation and quality rating display with detailed metadata reporting
-- **Quality Preview**: Pre-extraction resolution estimates with file size and quality ratings
+### Creating Crop Selections
+1. Navigate to the page containing the figure you want
+2. **Click and drag** on the PDF to select the area
+3. The crop appears in the "Crop Selections" list with an automatic name
+4. Repeat for additional crops
 
-### State Management
-The application uses a **centralized state management** pattern:
+### Adaptive Naming (Key Feature)
+1. Create your first crop (gets name like "document_Q0001")
+2. **Rename it** to your preferred format (e.g., "study_fig_001" or "nima_Q0001")
+3. **All future crops automatically follow your pattern!**
+   - If you renamed to "study_fig_001", next crops become "study_fig_002", "study_fig_003", etc.
+   - The system learns prefixes, suffixes, and number formats
 
-- **Document State**: Current PDF document, page numbers, and zoom levels
-- **Selection State**: Active crop selections with coordinates and metadata
-- **UI State**: Interface element states and user preferences
-- **Threading**: Background processing for non-blocking UI operations
+### Exporting Images
+- **Individual**: Select a crop → "Save Individual" → Choose location
+- **Batch Export**: "Select Output Directory" → "Export All Crops"
+- All images saved as high-quality PNG files
 
-## Recent Updates (January 2025)
+### Navigation & Controls
 
-### New Features Added
-- **URL PDF Loading**: Direct PDF loading from Google Drive and other URLs with automatic link conversion
-- **Crop Renaming**: Individual crop renaming functionality with dialog interface
-- **Sequential Naming Templates**: Updated to Q{:04d}, A{:04d}, H{:04d} format as requested
-- **Keyboard Shortcuts**: Comprehensive shortcuts for all major operations
-- **Undo Functionality**: Ctrl+Z to undo last crop selection
-- **Enhanced Navigation**: Delete/Backspace keys for crop deletion
-- **Google Drive Integration**: Framework for uploading exported crops (requires API setup)
-- **Adaptive Naming System**: Smart naming that learns from user rename patterns and automatically applies them to future crops
-- **Continuous PDF Scrolling**: Seamless mouse-only navigation through entire PDF documents with all pages displayed continuously
-- **Advanced Text Search**: Full-text search with result highlighting and navigation between found instances
-- **Auto-Visualization Highlighting**: Automatic highlighting of scientific visualization keywords (fig, figure, plot, diagram, etc.) in blue
+#### Keyboard Shortcuts
+- `Ctrl+O` - Open PDF file
+- `Ctrl+U` - Load PDF from URL
+- `Ctrl+E` - Export all crops
+- `Ctrl+Z` - Undo last crop
+- `Delete/Backspace` - Remove selected crop
+- `F2` - Rename selected crop
+- `Arrow Keys` - Navigate pages
+- `Page Up/Down` - Navigate pages
+- `Home/End` - First/last page
 
-### Keyboard Shortcuts
-- **File Operations**: Ctrl+O (Open), Ctrl+U (URL Load), Ctrl+E (Export), Ctrl+G (Upload to Drive)
-- **View Controls**: Ctrl+Plus/Minus (Zoom), Ctrl+0 (Reset), Ctrl+W (Fit Width)
-- **Crop Management**: Ctrl+Z (Undo), Delete/Backspace (Remove Selected)
-- **Navigation**: Arrow keys, Page Up/Down, Home/End for page navigation
-- **Search Functions**: Ctrl+F (Focus Search), F3 (Next Result), Shift+F3 (Previous Result)
+#### Mouse Controls
+- **Left click + drag** - Create crop selection
+- **Double-click crop** - Rename crop
+- **Mouse wheel** - Scroll through interface
 
-## External Dependencies
+### View Options
+- **Continuous Scroll**: View all pages in one scrollable view
+- **Auto-highlight Keywords**: Highlight words like "figure", "plot", "diagram" in blue
 
-### Core PDF Processing
-- **PyMuPDF (fitz)**: Primary PDF parsing and rendering engine
-- **Pillow (PIL)**: Image processing and format conversion
+## Troubleshooting
 
-### UI Framework
-- **Tkinter**: Native Python GUI framework for cross-platform desktop interface
-- **ttk**: Themed Tkinter widgets for modern UI appearance
+### Common Issues
 
-### Network and File Operations
-- **urllib**: URL downloading and parsing for PDF loading from web sources
-- **tempfile**: Temporary file handling for downloaded PDFs
-- **shutil**: File operations for download management
+**App won't start:**
+- Ensure Python 3.10+ is installed
+- Install all required packages: `pip install fitz pillow pyinstaller pymupdf`
 
-### System Integration
-- **pathlib**: Modern path handling for cross-platform file operations
-- **threading**: Background task processing to maintain UI responsiveness
-- **os**: Operating system interface for file operations and system integration
+**PDF won't load:**
+- Check if the PDF file is corrupted
+- Try a different PDF file
+- For URLs, ensure the link is a direct PDF download
 
-### Built-in Python Modules
-- **datetime**: Timestamp formatting for file metadata display
-- **sys**: System-specific parameters and functions for application lifecycle management
+**Crops appear too small/large:**
+- The zoom functionality has been disabled for stability
+- Crops are extracted at optimal resolution automatically
+- Use the scroll bars if the PDF appears too large for the window
+
+**Exported images are low quality:**
+- The app automatically uses high DPI (300+) for extraction
+- Quality depends on the source PDF resolution
+
+### Getting Help
+
+If you encounter issues:
+1. Check that all dependencies are installed correctly
+2. Try restarting the application
+3. Ensure your PDF files are not corrupted or password-protected
+
+## Technical Details
+
+### System Requirements
+- **OS**: Windows 10+, macOS 10.14+, or Linux
+- **Python**: 3.10 or later
+- **Memory**: 2GB RAM minimum, 4GB recommended
+- **Storage**: 100MB for application + space for exported images
+
+### Supported Formats
+- **Input**: PDF files (including password-protected with manual unlock)
+- **Output**: PNG images (high-quality, 300+ DPI)
+
+### Dependencies
+- **PyMuPDF (fitz)**: PDF parsing and rendering
+- **Pillow (PIL)**: Image processing and export
+- **Tkinter**: User interface (included with Python)
+
+## Project Structure
+
+```
+pdf-figure-extractor/
+├── main.py              # Application entry point
+├── pdf_viewer.py        # Main application logic and UI
+├── ui_components.py     # Reusable UI components
+├── image_extractor.py   # High-quality image extraction
+├── utils.py             # Utility functions
+└── README.md           # This file
+```
+
+## License
+
+This project is open source. Feel free to use, modify, and distribute.
+
+## Contributing
+
+Contributions are welcome! The codebase is well-documented and modular for easy enhancement.
