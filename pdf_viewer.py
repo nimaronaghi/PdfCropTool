@@ -24,7 +24,8 @@ class PDFViewerApp:
         self.pdf_images = []  # Cache for rendered pages
         self.crop_selections = []  # List of crop selections
         self.output_directory = ""
-        self.naming_pattern = "figure_{:03d}"
+        self.naming_pattern = "Q{:04d}"
+        self.use_sequential_naming = True
         
         self.setup_ui()
         self.setup_bindings()
@@ -804,10 +805,19 @@ class PDFViewerApp:
             exported_count = 0
             
             for i, crop in enumerate(self.crop_selections):
-                # Generate filename
-                filename = self.naming_pattern.format(i + 1)
-                if not filename.endswith('.png'):
-                    filename += '.png'
+                # Generate filename based on naming mode
+                if self.use_sequential_naming:
+                    filename = self.naming_pattern.format(i + 1)
+                    if not filename.endswith('.png'):
+                        filename += '.png'
+                else:
+                    # Use custom name if available, otherwise use crop number
+                    if 'custom_name' in crop and crop['custom_name']:
+                        filename = crop['custom_name']
+                    else:
+                        filename = f"crop_{i + 1:04d}"
+                    if not filename.endswith('.png'):
+                        filename += '.png'
                     
                 output_path = os.path.join(self.output_directory, filename)
                 
@@ -847,6 +857,10 @@ class PDFViewerApp:
         """Update the naming pattern for exported files"""
         self.naming_pattern = pattern
         
+    def update_sequential_naming(self, use_sequential):
+        """Update whether to use sequential naming or individual crop names"""
+        self.use_sequential_naming = use_sequential
+        
     def remove_crop(self, index):
         """Remove a specific crop selection"""
         if 0 <= index < len(self.crop_selections):
@@ -861,9 +875,12 @@ class PDFViewerApp:
             
         crop = self.crop_selections[crop_index]
         
-        # Generate default filename based on crop number and page
+        # Generate default filename - use custom name if available
         page_num = crop['page'] + 1
-        default_filename = f"crop_{crop_index + 1:03d}_page_{page_num:03d}.png"
+        if 'custom_name' in crop and crop['custom_name']:
+            default_filename = f"{crop['custom_name']}.png"
+        else:
+            default_filename = f"crop_{crop_index + 1:03d}_page_{page_num:03d}.png"
         
         # Let user choose save location and filename
         file_path = filedialog.asksaveasfilename(

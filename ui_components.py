@@ -51,6 +51,10 @@ class CropFrame(ttk.LabelFrame):
                                             command=self.save_selected_crop, state=tk.DISABLED)
         self.save_individual_btn.pack(side=tk.LEFT, padx=(0, 5))
         
+        self.rename_btn = ttk.Button(bottom_button_frame, text="Rename", 
+                                   command=self.rename_selected_crop, state=tk.DISABLED)
+        self.rename_btn.pack(side=tk.RIGHT)
+        
         # Bind selection events
         self.crop_listbox.bind('<<ListboxSelect>>', self.on_selection_change)
         
@@ -83,12 +87,18 @@ class CropFrame(ttk.LabelFrame):
                 except Exception:
                     pass
             
-            item_text = f"#{i+1}: Page {page_num} ({width}×{height}){quality_info}"
+            # Check if crop has custom name
+            if 'custom_name' in crop and crop['custom_name']:
+                crop_name = crop['custom_name']
+                item_text = f"#{i+1}: {crop_name} - Page {page_num} ({width}×{height}){quality_info}"
+            else:
+                item_text = f"#{i+1}: Page {page_num} ({width}×{height}){quality_info}"
             self.crop_listbox.insert(tk.END, item_text)
             
         # Update button states
         self.remove_btn.config(state=tk.DISABLED)
         self.save_individual_btn.config(state=tk.DISABLED)
+        self.rename_btn.config(state=tk.DISABLED)
         
     def on_selection_change(self, event):
         """Handle crop selection changes"""
@@ -96,6 +106,7 @@ class CropFrame(ttk.LabelFrame):
         if selection:
             self.remove_btn.config(state=tk.NORMAL)
             self.save_individual_btn.config(state=tk.NORMAL)
+            self.rename_btn.config(state=tk.NORMAL)
             
             # Navigate to the page containing the selected crop
             crop_index = selection[0]
@@ -108,6 +119,7 @@ class CropFrame(ttk.LabelFrame):
         else:
             self.remove_btn.config(state=tk.DISABLED)
             self.save_individual_btn.config(state=tk.DISABLED)
+            self.rename_btn.config(state=tk.DISABLED)
             
     def remove_selected_crop(self):
         """Remove the currently selected crop"""
@@ -165,6 +177,70 @@ class CropFrame(ttk.LabelFrame):
             print(f"Error showing quality preview: {e}")
             # Fallback to direct save
             self.app.save_individual_crop(crop_index)
+            
+    def rename_selected_crop(self):
+        """Rename the currently selected crop"""
+        selection = self.crop_listbox.curselection()
+        if selection:
+            crop_index = selection[0]
+            if crop_index < len(self.app.crop_selections):
+                self.show_rename_dialog(crop_index)
+                
+    def show_rename_dialog(self, crop_index):
+        """Show dialog to rename a crop"""
+        crop = self.app.crop_selections[crop_index]
+        current_name = crop.get('custom_name', f"crop_{crop_index + 1:04d}")
+        
+        # Create rename dialog
+        dialog = tk.Toplevel(self.app.root)
+        dialog.title("Rename Crop")
+        dialog.geometry("350x150")
+        dialog.resizable(False, False)
+        dialog.transient(self.app.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Dialog content
+        main_frame = ttk.Frame(dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text=f"Rename Crop #{crop_index + 1}:").pack(anchor=tk.W, pady=(0, 10))
+        
+        name_var = tk.StringVar(value=current_name)
+        name_entry = ttk.Entry(main_frame, textvariable=name_var, width=30)
+        name_entry.pack(fill=tk.X, pady=(0, 10))
+        name_entry.select_range(0, tk.END)
+        name_entry.focus()
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def save_name():
+            new_name = name_var.get().strip()
+            if new_name:
+                # Remove file extension if user added one
+                if new_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    new_name = os.path.splitext(new_name)[0]
+                
+                crop['custom_name'] = new_name
+                self.update_crop_list(self.app.crop_selections)
+                dialog.destroy()
+        
+        def cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="Save", command=save_name).pack(side=tk.RIGHT)
+        
+        # Bind Enter and Escape keys
+        dialog.bind('<Return>', lambda e: save_name())
+        dialog.bind('<Escape>', lambda e: cancel())
 
 class NamingFrame(ttk.LabelFrame):
     """Frame for configuring file naming patterns"""
@@ -179,7 +255,7 @@ class NamingFrame(ttk.LabelFrame):
         # Pattern input
         ttk.Label(self, text="Naming Pattern:").pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="figure_{:03d}")
+        self.pattern_var = tk.StringVar(value="Q{:04d}")
         self.pattern_entry = ttk.Entry(self, textvariable=self.pattern_var, width=20)
         self.pattern_entry.pack(fill=tk.X, pady=(2, 5))
         
@@ -188,7 +264,7 @@ class NamingFrame(ttk.LabelFrame):
         
         # Preview
         ttk.Label(self, text="Preview:").pack(anchor=tk.W)
-        self.preview_label = ttk.Label(self, text="figure_001.png, figure_002.png, ...", 
+        self.preview_label = ttk.Label(self, text="Q0001.png, Q0002.png, ...", 
                                       foreground="gray", wraplength=200)
         self.preview_label.pack(fill=tk.X, pady=(2, 5))
         
@@ -197,20 +273,31 @@ class NamingFrame(ttk.LabelFrame):
         preset_frame.pack(fill=tk.X, pady=(5, 0))
         
         presets = [
-            ("Fig {}", "fig_{:d}"),
-            ("Image 001", "image_{:03d}"),
-            ("Crop_01", "crop_{:02d}")
+            ("Q0001", "Q{:04d}"),
+            ("A0001", "A{:04d}"),
+            ("H0001", "H{:04d}")
         ]
         
         for i, (label, pattern) in enumerate(presets):
             ttk.Button(preset_frame, text=label, width=8,
                       command=lambda p=pattern: self.set_pattern(p)).pack(side=tk.LEFT, padx=1)
         
+        # Additional controls
+        controls_frame = ttk.Frame(self)
+        controls_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # Sequential naming checkbox
+        self.use_sequential = tk.BooleanVar(value=True)
+        self.sequential_check = ttk.Checkbutton(controls_frame, text="Use Sequential Naming", 
+                                              variable=self.use_sequential,
+                                              command=self.on_sequential_change)
+        self.sequential_check.pack(anchor=tk.W, pady=(0, 5))
+        
         # Help text
-        help_text = ("Use {:d} for numbers, {:03d} for zero-padded numbers.\n"
-                    "Example: 'figure_{:03d}' → figure_001.png")
+        help_text = ("Templates: Q{:04d}, A{:04d}, H{:04d} for standard naming.\n"
+                    "Uncheck sequential naming to use individual crop names.")
         ttk.Label(self, text=help_text, font=("Arial", 8), 
-                 foreground="gray", wraplength=200, justify=tk.LEFT).pack(pady=(10, 0))
+                 foreground="gray", wraplength=200, justify=tk.LEFT).pack(pady=(5, 0))
         
     def on_pattern_change(self, *args):
         """Handle pattern changes"""
@@ -221,6 +308,15 @@ class NamingFrame(ttk.LabelFrame):
         
         # Update preview
         self.update_preview(pattern)
+        
+    def on_sequential_change(self):
+        """Handle sequential naming toggle"""
+        use_sequential = self.use_sequential.get()
+        self.app.update_sequential_naming(use_sequential)
+        
+        # Enable/disable pattern controls
+        state = tk.NORMAL if use_sequential else tk.DISABLED
+        self.pattern_entry.config(state=state)
         
     def update_preview(self, pattern):
         """Update the naming preview"""
