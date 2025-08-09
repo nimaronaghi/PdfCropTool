@@ -227,14 +227,14 @@ class CropFrame(ttk.LabelFrame):
                 self.show_rename_dialog(crop_index)
                 
     def show_rename_dialog(self, crop_index):
-        """Show dialog to rename a crop"""
+        """Show streamlined rename dialog with improved UX"""
         crop = self.app.crop_selections[crop_index]
         current_name = crop.get('custom_name', f"crop_{crop_index + 1:04d}")
         
-        # Create rename dialog
+        # Create compact rename dialog
         dialog = tk.Toplevel(self.app.root)
         dialog.title("Rename Crop")
-        dialog.geometry("350x150")
+        dialog.geometry("400x120")
         dialog.resizable(False, False)
         dialog.transient(self.app.root)
         dialog.grab_set()
@@ -245,25 +245,32 @@ class CropFrame(ttk.LabelFrame):
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
         
-        # Dialog content
-        main_frame = ttk.Frame(dialog, padding=20)
+        # Dialog content with tighter layout
+        main_frame = ttk.Frame(dialog, padding=15)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(main_frame, text=f"Rename Crop #{crop_index + 1}:").pack(anchor=tk.W, pady=(0, 10))
+        ttk.Label(main_frame, text=f"Crop #{crop_index + 1} name:").pack(anchor=tk.W, pady=(0, 5))
         
         name_var = tk.StringVar(value=current_name)
-        name_entry = ttk.Entry(main_frame, textvariable=name_var, width=30)
+        name_entry = ttk.Entry(main_frame, textvariable=name_var, width=40, font=("TkDefaultFont", 10))
         name_entry.pack(fill=tk.X, pady=(0, 10))
-        name_entry.select_range(0, tk.END)
+        
+        # Auto-select the part that's most likely to be changed (everything after the filename)
+        if "_Q" in current_name:
+            # Select from _Q onwards for easy replacement
+            start_pos = current_name.find("_Q")
+            name_entry.select_range(start_pos, tk.END)
+        else:
+            name_entry.select_range(0, tk.END)
         name_entry.focus()
         
-        # Buttons
+        # Buttons in compact layout
         button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
+        button_frame.pack(fill=tk.X)
         
         def save_name():
             new_name = name_var.get().strip()
-            if new_name:
+            if new_name and new_name != current_name:
                 self.app.crop_selections[crop_index]['custom_name'] = new_name
                 self.update_crop_list(self.app.crop_selections)
             dialog.destroy()
@@ -271,14 +278,23 @@ class CropFrame(ttk.LabelFrame):
         def cancel():
             dialog.destroy()
             
-        # Handle Enter key
+        # Handle Enter and Escape keys
         def on_enter(event):
             save_name()
             
+        def on_escape(event):
+            cancel()
+            
         name_entry.bind('<Return>', on_enter)
+        dialog.bind('<Escape>', on_escape)
         
+        # Compact button layout
         ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Button(button_frame, text="OK", command=save_name).pack(side=tk.RIGHT)
+        save_btn = ttk.Button(button_frame, text="Save", command=save_name)
+        save_btn.pack(side=tk.RIGHT)
+        
+        # Make Save button default
+        dialog.bind('<Return>', on_enter)
         
     def on_double_click_rename(self, event):
         """Handle double-click renaming like Windows folders"""

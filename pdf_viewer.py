@@ -142,7 +142,7 @@ class PDFViewerApp:
         file_menu.add_command(label="Load PDF from URL...", command=self.load_pdf_from_url, accelerator="Ctrl+U")
         file_menu.add_separator()
         file_menu.add_command(label="Export Crops", command=self.export_all_crops, accelerator="Ctrl+E")
-        file_menu.add_command(label="Upload to Google Drive", command=self.upload_to_drive, accelerator="Ctrl+G")
+
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit, accelerator="Ctrl+Q")
         
@@ -1015,18 +1015,75 @@ class PDFViewerApp:
                            f"Failed to save crop #{crop_number}: {error_msg}")
     
     def load_pdf_from_url(self):
-        """Load PDF from URL (supports Google Drive direct download links)"""
-        url = simpledialog.askstring("Load PDF from URL", 
-                                    "Enter PDF URL:\n(Google Drive links will be auto-converted)")
+        """Load PDF from URL with streamlined interface"""
+        # Create a custom dialog for better UX
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Load PDF from URL")
+        dialog.geometry("500x150")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Dialog content
+        main_frame = ttk.Frame(dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text="Enter PDF URL:").pack(anchor=tk.W, pady=(0, 5))
+        
+        url_var = tk.StringVar()
+        url_entry = ttk.Entry(main_frame, textvariable=url_var, width=60)
+        url_entry.pack(fill=tk.X, pady=(0, 10))
+        url_entry.focus()
+        
+        # Try to get URL from clipboard
+        try:
+            clipboard_text = dialog.clipboard_get()
+            if clipboard_text and ("http" in clipboard_text or "drive.google.com" in clipboard_text):
+                url_var.set(clipboard_text)
+                url_entry.select_range(0, tk.END)
+        except:
+            pass
+        
+        result = {'url': None}
+        
+        def load_url():
+            result['url'] = url_var.get().strip()
+            dialog.destroy()
+            
+        def cancel():
+            dialog.destroy()
+            
+        # Handle Enter key
+        def on_enter(event):
+            load_url()
+            
+        url_entry.bind('<Return>', on_enter)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="Load", command=load_url).pack(side=tk.RIGHT)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        url = result['url']
         if not url:
             return
             
-        # Convert Google Drive share links to direct download links automatically
+        # Convert Google Drive share links to direct download links automatically (silent)
         if "drive.google.com" in url and "/file/d/" in url:
             # Extract file ID from various Google Drive URL formats
             file_id = url.split("/file/d/")[1].split("/")[0]
             url = f"https://drive.google.com/uc?export=download&id={file_id}"
-            messagebox.showinfo("URL Converted", f"Google Drive URL automatically converted for download.\nFile ID: {file_id}")
         elif "drive.google.com" in url:
             # Handle other Google Drive formats
             if "/view" in url:
@@ -1139,23 +1196,7 @@ class PDFViewerApp:
             
         self.info_text.config(state=tk.DISABLED)
         
-    def upload_to_drive(self):
-        """Upload exported crops to Google Drive folder"""
-        if not self.crop_selections:
-            messagebox.showwarning("No Crops", "No crops to upload. Please create some crop selections first.")
-            return
-            
-        drive_folder_url = simpledialog.askstring("Upload to Google Drive", 
-                                                 "Enter Google Drive folder URL:\n(Share the folder and paste the link)")
-        if not drive_folder_url:
-            return
-            
-        messagebox.showinfo("Upload to Google Drive", 
-                           "Google Drive upload functionality requires API setup.\n\n"
-                           "For now, please:\n"
-                           "1. Export crops to local folder\n"
-                           "2. Manually upload the folder to Google Drive\n\n"
-                           "API integration can be added later with proper authentication.")
+
         
     def undo_last_crop(self):
         """Undo the last crop selection"""
@@ -1185,7 +1226,7 @@ class PDFViewerApp:
         self.root.bind('<Control-o>', lambda e: self.open_pdf())
         self.root.bind('<Control-u>', lambda e: self.load_pdf_from_url())
         self.root.bind('<Control-e>', lambda e: self.export_all_crops())
-        self.root.bind('<Control-g>', lambda e: self.upload_to_drive())
+
         self.root.bind('<Control-q>', lambda e: self.root.quit())
         
         # View operations
