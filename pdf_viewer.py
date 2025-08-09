@@ -1209,7 +1209,7 @@ class PDFViewerApp:
         self.root.bind("<Page_Down>", lambda e: self.next_page())
         
     def get_default_crop_name(self):
-        """Generate default crop name: [PDF filename without .pdf] + [0001]"""
+        """Generate default crop name: [PDF filename without .pdf] + [_Q0001]"""
         # Get PDF filename without extension
         if hasattr(self, 'current_file_path') and self.current_file_path:
             pdf_name = os.path.splitext(os.path.basename(self.current_file_path))[0]
@@ -1219,4 +1219,4 @@ class PDFViewerApp:
         # Count existing crops to get next number
         crop_count = len(self.crop_selections) + 1
         
-        return f"{pdf_name}{crop_count:04d}"
+        return f"{pdf_name}_Q{crop_count:04d}"
