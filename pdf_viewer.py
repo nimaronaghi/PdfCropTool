@@ -76,31 +76,43 @@ class PDFViewerApp:
         self.left_panel.bind("<Configure>", _configure_scroll_region)
         self.left_canvas.bind("<Configure>", _configure_scroll_region)
         
-        # Bind mouse wheel to left panel scrolling
+        # Enhanced mouse wheel scrolling for left panel
         def _on_left_mousewheel(event):
-            # Check if mouse is over the left scroll area
-            x, y = self.root.winfo_pointerxy()
-            widget_under_mouse = self.root.winfo_containing(x, y)
-            
-            # Check if the widget is part of the left panel hierarchy
-            current = widget_under_mouse
-            while current:
-                if current == self.left_canvas or current == self.left_panel or current == self.left_scroll_frame:
-                    # Scroll the left canvas
-                    try:
-                        self.left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-                    except:
-                        pass
-                    return "break"
-                try:
-                    current = current.master
-                except:
-                    break
+            try:
+                # Handle different platforms (Windows uses event.delta, Linux uses event.num)
+                if event.delta:
+                    delta = int(-1 * (event.delta / 120))
+                elif event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    return
+                
+                # Scroll the left canvas
+                self.left_canvas.yview_scroll(delta, "units")
+                return "break"
+            except Exception:
+                pass
         
-        # Bind mousewheel to the left panel components
-        self.left_canvas.bind("<MouseWheel>", _on_left_mousewheel)
-        self.left_panel.bind("<MouseWheel>", _on_left_mousewheel)
-        self.left_scroll_frame.bind("<MouseWheel>", _on_left_mousewheel)
+        # Bind mousewheel to all left panel components recursively
+        def bind_mousewheel_recursive(widget):
+            widget.bind("<MouseWheel>", _on_left_mousewheel)  # Windows
+            widget.bind("<Button-4>", _on_left_mousewheel)    # Linux scroll up
+            widget.bind("<Button-5>", _on_left_mousewheel)    # Linux scroll down
+            
+            # Bind to all children
+            for child in widget.winfo_children():
+                try:
+                    bind_mousewheel_recursive(child)
+                except:
+                    pass
+        
+        # Initially bind to frame, then refresh after components are created
+        bind_mousewheel_recursive(self.left_scroll_frame)
+        
+        # Store the binding function for later use
+        self._bind_mousewheel_recursive = bind_mousewheel_recursive
         
         # Right panel for PDF display
         self.right_panel = ttk.Frame(self.main_frame)
@@ -258,6 +270,10 @@ class PDFViewerApp:
         ttk.Button(export_frame, text="Export All Crops", 
                   command=self.export_all_crops, style="Accent.TButton").pack(fill=tk.X, pady=(10, 2))
         
+        # Refresh mouse wheel bindings after all components are created
+        if hasattr(self, '_bind_mousewheel_recursive'):
+            self._bind_mousewheel_recursive(self.left_scroll_frame)
+        
     def setup_pdf_viewer(self):
         """Setup the PDF viewer canvas"""
         # Create scrollable canvas
@@ -284,6 +300,33 @@ class PDFViewerApp:
         self.canvas.bind("<Button-1>", self.start_crop)
         self.canvas.bind("<B1-Motion>", self.update_crop)
         self.canvas.bind("<ButtonRelease-1>", self.finish_crop)
+        
+        # Enhanced mouse wheel scrolling for PDF canvas
+        def _on_canvas_mousewheel(event):
+            try:
+                # Handle different platforms
+                if event.delta:
+                    delta = int(-1 * (event.delta / 120))
+                elif event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    return
+                
+                # Scroll vertically by default, horizontally with Shift
+                if event.state & 0x1:  # Shift key pressed
+                    self.canvas.xview_scroll(delta, "units")
+                else:
+                    self.canvas.yview_scroll(delta, "units")
+                return "break"
+            except Exception:
+                pass
+        
+        # Bind mouse wheel to PDF canvas
+        self.canvas.bind("<MouseWheel>", _on_canvas_mousewheel)  # Windows
+        self.canvas.bind("<Button-4>", _on_canvas_mousewheel)    # Linux scroll up  
+        self.canvas.bind("<Button-5>", _on_canvas_mousewheel)    # Linux scroll down
         
         # Variables for crop selection
         self.crop_start = None

@@ -61,6 +61,43 @@ class CropFrame(ttk.LabelFrame):
         # Bind double-click for renaming (Windows-like behavior)
         self.crop_listbox.bind('<Double-Button-1>', self.on_double_click_rename)
         
+        # Enhanced mouse wheel scrolling for crop listbox
+        def _on_listbox_mousewheel(event):
+            try:
+                # Handle different platforms
+                if event.delta:
+                    delta = int(-1 * (event.delta / 120))
+                elif event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    return
+                
+                # Get current view and total items
+                total_items = self.crop_listbox.size()
+                if total_items == 0:
+                    return
+                    
+                # Calculate new position
+                first, last = self.crop_listbox.yview()
+                visible_items = self.crop_listbox.winfo_height() // 20  # approximate item height
+                
+                # Scroll the listbox
+                if delta > 0 and last < 1.0:  # Scroll down
+                    self.crop_listbox.yview_scroll(delta, "units")
+                elif delta < 0 and first > 0.0:  # Scroll up
+                    self.crop_listbox.yview_scroll(delta, "units")
+                    
+                return "break"
+            except Exception:
+                pass
+        
+        # Bind mouse wheel to listbox
+        self.crop_listbox.bind("<MouseWheel>", _on_listbox_mousewheel)  # Windows
+        self.crop_listbox.bind("<Button-4>", _on_listbox_mousewheel)    # Linux scroll up
+        self.crop_listbox.bind("<Button-5>", _on_listbox_mousewheel)    # Linux scroll down
+        
     def update_crop_list(self, crop_selections):
         """Update the crop list display with quality information"""
         self.crop_listbox.delete(0, tk.END)
