@@ -277,6 +277,10 @@ class CropFrame(ttk.LabelFrame):
         def save_name():
             new_name = name_var.get().strip()
             if new_name and new_name != current_name:
+                # Learn from the rename pattern
+                self.app.learn_from_rename(crop_index, current_name, new_name)
+                
+                # Update the crop name
                 self.app.crop_selections[crop_index]['custom_name'] = new_name
                 self.update_crop_list(self.app.crop_selections)
             dialog.destroy()

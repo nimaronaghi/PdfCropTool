@@ -55,6 +55,7 @@ The application uses a **centralized state management** pattern:
 - **Undo Functionality**: Ctrl+Z to undo last crop selection
 - **Enhanced Navigation**: Delete/Backspace keys for crop deletion
 - **Google Drive Integration**: Framework for uploading exported crops (requires API setup)
+- **Adaptive Naming System**: Smart naming that learns from user rename patterns and automatically applies them to future crops
 
 ### Keyboard Shortcuts
 - **File Operations**: Ctrl+O (Open), Ctrl+U (URL Load), Ctrl+E (Export), Ctrl+G (Upload to Drive)

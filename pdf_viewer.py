@@ -31,6 +31,11 @@ class PDFViewerApp:
         self.naming_pattern = "Q{:04d}"
         self.use_sequential_naming = False
         
+        # Adaptive naming system
+        self.learned_naming_prefix = ""  # Learned prefix from user renaming (e.g., "nima_")
+        self.learned_naming_pattern = ""  # Full learned pattern (e.g., "nima_Q{:04d}")
+        self.naming_learning_enabled = True
+        
         self.setup_ui()
         self.setup_bindings()
         
@@ -733,8 +738,8 @@ class PDFViewerApp:
             pdf_right = right / display_scale
             pdf_bottom = bottom / display_scale
             
-            # Generate default name: [PDF filename without .pdf] + [0001]
-            default_name = self.get_default_crop_name()
+            # Generate adaptive default name based on learned patterns
+            default_name = self.get_adaptive_crop_name()
             
             # Store crops with PDF coordinates and display coordinates for drawing
             crop_data = {
@@ -1261,3 +1266,133 @@ class PDFViewerApp:
         crop_count = len(self.crop_selections) + 1
         
         return f"{pdf_name}_Q{crop_count:04d}"
+    
+    def get_adaptive_crop_name(self):
+        """Generate adaptive crop name based on learned patterns from user renames"""
+        if not self.naming_learning_enabled:
+            return self.get_default_crop_name()
+        
+        # Count existing crops to get next number
+        crop_count = len(self.crop_selections) + 1
+        
+        # If we have a learned pattern, use it
+        if self.learned_naming_pattern:
+            try:
+                return self.learned_naming_pattern.format(crop_count)
+            except:
+                # Fallback if format string is invalid
+                pass
+        
+        # If we have a learned prefix, use it with Q pattern
+        if self.learned_naming_prefix:
+            return f"{self.learned_naming_prefix}Q{crop_count:04d}"
+        
+        # Fallback to default naming
+        return self.get_default_crop_name()
+    
+    def learn_from_rename(self, crop_index, old_name, new_name):
+        """Learn naming patterns from user renames"""
+        if not self.naming_learning_enabled or not new_name or not old_name:
+            return
+        
+        # Extract patterns from the rename
+        pattern = self._extract_naming_pattern(crop_index, old_name, new_name)
+        if pattern:
+            self.learned_naming_prefix = pattern['prefix']
+            self.learned_naming_pattern = pattern['full_pattern']
+            print(f"Learned naming pattern: {self.learned_naming_pattern}")
+            
+            # Update subsequent crops that haven't been manually renamed
+            self._update_subsequent_crop_names(crop_index)
+    
+    def _extract_naming_pattern(self, crop_index, old_name, new_name):
+        """Extract naming pattern from user rename"""
+        import re
+        
+        # Look for number patterns in both names
+        old_numbers = re.findall(r'\d+', old_name)
+        new_numbers = re.findall(r'\d+', new_name)
+        
+        if not old_numbers or not new_numbers:
+            return None
+        
+        # Find the number that represents the crop sequence
+        old_sequence = None
+        new_sequence = None
+        
+        # Check if the last number in both names could be sequence numbers
+        if old_numbers and new_numbers:
+            old_last_num = int(old_numbers[-1])
+            new_last_num = int(new_numbers[-1])
+            
+            # If the difference matches the crop index difference, this is likely the sequence
+            expected_old = crop_index + 1
+            if old_last_num == expected_old and new_last_num == expected_old:
+                old_sequence = old_last_num
+                new_sequence = new_last_num
+        
+        if old_sequence is None:
+            return None
+        
+        # Extract prefix (everything before the sequence number)
+        old_str_before_num = old_name[:old_name.rfind(str(old_sequence))]
+        new_str_before_num = new_name[:new_name.rfind(str(new_sequence))]
+        
+        # Extract suffix (everything after the sequence number)
+        old_str_after_num = old_name[old_name.rfind(str(old_sequence)) + len(str(old_sequence)):]
+        new_str_after_num = new_name[new_name.rfind(str(new_sequence)) + len(str(new_sequence)):]
+        
+        # Determine the number format by looking at the original formatting
+        # Find how the number was formatted in the new name
+        new_num_in_name = new_name[new_name.rfind(str(new_sequence)):new_name.rfind(str(new_sequence)) + len(str(new_sequence))]
+        
+        # Check if it has leading zeros
+        if new_num_in_name.startswith('0') and len(new_num_in_name) > 1:
+            # Preserve zero-padding format
+            num_format = f"{{:0{len(new_num_in_name)}d}}"
+        else:
+            # Use 4-digit zero padding as default
+            num_format = "{:04d}"
+        
+        return {
+            'prefix': new_str_before_num,
+            'suffix': new_str_after_num,
+            'full_pattern': f"{new_str_before_num}{num_format}{new_str_after_num}"
+        }
+    
+    def _update_subsequent_crop_names(self, changed_crop_index):
+        """Update subsequent crop names that haven't been manually renamed"""
+        if not self.learned_naming_pattern:
+            return
+        
+        updated = False
+        for i in range(changed_crop_index + 1, len(self.crop_selections)):
+            crop = self.crop_selections[i]
+            current_name = crop.get('custom_name', '')
+            
+            # Check if this crop still has a default-style name (not manually renamed by user)
+            if self._is_default_style_name(current_name, i):
+                try:
+                    new_name = self.learned_naming_pattern.format(i + 1)
+                    crop['custom_name'] = new_name
+                    updated = True
+                except:
+                    break
+        
+        if updated:
+            # Update the crop list display
+            self.crop_frame.update_crop_list(self.crop_selections)
+    
+    def _is_default_style_name(self, name, crop_index):
+        """Check if a name appears to be a default-generated name"""
+        if not name:
+            return True
+        
+        # Check if it matches the default pattern
+        default_name = self.get_default_crop_name()
+        expected_number = crop_index + 1
+        
+        # Simple heuristic: if it contains Q followed by the expected number, it's likely default
+        import re
+        pattern = f"Q{expected_number:04d}"
+        return pattern in name
