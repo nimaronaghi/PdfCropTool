@@ -57,16 +57,16 @@ class ImageExtractor:
             # Get page dimensions for coordinate validation
             page_rect = page.rect
             
-            # Convert display coordinates to PDF coordinates
-            # The display rendering uses: zoom_level * 2 (for high DPI)
-            display_render_scale = display_zoom * 2.0
-            
-            # Convert display pixel coordinates to PDF coordinates
-            # Display coordinates are in pixels at the current zoom/render scale
-            pdf_left = coords[0] / display_render_scale
-            pdf_top = coords[1] / display_render_scale  
-            pdf_right = coords[2] / display_render_scale
-            pdf_bottom = coords[3] / display_render_scale
+            # Use pre-calculated PDF coordinates if available (new format)
+            if 'pdf_coords' in crop_data:
+                pdf_left, pdf_top, pdf_right, pdf_bottom = crop_data['pdf_coords']
+            else:
+                # Fallback: convert display coordinates to PDF coordinates (legacy format)
+                display_render_scale = display_zoom * 2.0
+                pdf_left = coords[0] / display_render_scale
+                pdf_top = coords[1] / display_render_scale  
+                pdf_right = coords[2] / display_render_scale
+                pdf_bottom = coords[3] / display_render_scale
             
             # Ensure coordinates are within page bounds
             pdf_left = max(0, min(pdf_left, page_rect.width))
@@ -250,14 +250,16 @@ class ImageExtractor:
             native_scale = self._get_page_native_scale(page)
             extraction_scale = max(native_scale, 4.0)
             
-            # Convert display coordinates to PDF coordinates for preview
-            display_render_scale = display_zoom * 2.0
-            
-            # Calculate PDF coordinates from display coordinates
-            pdf_left = coords[0] / display_render_scale
-            pdf_top = coords[1] / display_render_scale
-            pdf_right = coords[2] / display_render_scale
-            pdf_bottom = coords[3] / display_render_scale
+            # Use pre-calculated PDF coordinates if available (new format)
+            if 'pdf_coords' in crop_data:
+                pdf_left, pdf_top, pdf_right, pdf_bottom = crop_data['pdf_coords']
+            else:
+                # Fallback: convert display coordinates to PDF coordinates (legacy format)
+                display_render_scale = display_zoom * 2.0
+                pdf_left = coords[0] / display_render_scale
+                pdf_top = coords[1] / display_render_scale
+                pdf_right = coords[2] / display_render_scale
+                pdf_bottom = coords[3] / display_render_scale
             
             # Calculate PDF dimensions
             pdf_width = pdf_right - pdf_left

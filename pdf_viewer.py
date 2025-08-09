@@ -688,11 +688,22 @@ class PDFViewerApp:
             right = max(x1, x2)
             bottom = max(y1, y2)
             
-            # Add to crop selections
+            # Convert display coordinates to normalized PDF coordinates immediately
+            # This ensures all crops use the same coordinate system regardless of zoom
+            display_scale = self.zoom_level * 2.0  # Current display scale
+            
+            # Convert to PDF coordinates (normalized, zoom-independent)
+            pdf_left = left / display_scale
+            pdf_top = top / display_scale
+            pdf_right = right / display_scale
+            pdf_bottom = bottom / display_scale
+            
+            # Store crops with PDF coordinates and display coordinates for drawing
             crop_data = {
                 'page': self.current_page,
-                'coords': (left, top, right, bottom),
-                'zoom': self.zoom_level
+                'coords': (left, top, right, bottom),  # Display coords for drawing rectangles
+                'pdf_coords': (pdf_left, pdf_top, pdf_right, pdf_bottom),  # PDF coords for extraction
+                'zoom': self.zoom_level  # Zoom level when created (for display only)
             }
             self.crop_selections.append(crop_data)
             
@@ -708,15 +719,29 @@ class PDFViewerApp:
         
         for i, crop in enumerate(self.crop_selections):
             if crop['page'] == self.current_page:
-                coords = crop['coords']
+                # Convert PDF coordinates back to current display coordinates for drawing
+                if 'pdf_coords' in crop:
+                    pdf_coords = crop['pdf_coords']
+                    current_scale = self.zoom_level * 2.0
+                    
+                    # Convert PDF coords to current display coords
+                    left = pdf_coords[0] * current_scale
+                    top = pdf_coords[1] * current_scale
+                    right = pdf_coords[2] * current_scale
+                    bottom = pdf_coords[3] * current_scale
+                else:
+                    # Legacy format - use stored display coordinates (may be inaccurate after zoom changes)
+                    coords = crop['coords']
+                    left, top, right, bottom = coords
+                
                 rect = self.canvas.create_rectangle(
-                    coords[0], coords[1], coords[2], coords[3],
+                    left, top, right, bottom,
                     outline="blue", width=2, tags="saved_crop"
                 )
                 
                 # Add crop number label
-                center_x = (coords[0] + coords[2]) / 2
-                center_y = coords[1] + 15
+                center_x = (left + right) / 2
+                center_y = top + 15
                 self.canvas.create_text(
                     center_x, center_y, text=f"#{i+1}",
                     fill="blue", font=("Arial", 10, "bold"), tags="saved_crop"
