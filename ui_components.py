@@ -146,11 +146,12 @@ class CropFrame(ttk.LabelFrame):
             
             if preview_info:
                 details = (f"Quality Preview for Crop #{crop_index + 1}\n\n"
-                          f"Resolution: {preview_info['estimated_dpi']} DPI\n"
+                          f"Resolution: {preview_info['estimated_dpi']} DPI (Native PDF Scale: {preview_info['native_scale']:.1f}x)\n"
                           f"Output Size: {preview_info['output_width']}×{preview_info['output_height']} pixels\n"
                           f"Physical Size: {preview_info['width_inches']}×{preview_info['height_inches']} inches\n"
-                          f"Quality Rating: {preview_info['quality_rating']}\n"
-                          f"Estimated File Size: {preview_info['file_size_estimate']} MB\n\n"
+                          f"Quality: {preview_info['quality_rating']}\n"
+                          f"Source: {preview_info['source_quality']}\n"
+                          f"File Size: ~{preview_info['file_size_estimate']} MB\n\n"
                           f"Proceed with saving?")
                 
                 result = messagebox.askyesno("Quality Preview", details)

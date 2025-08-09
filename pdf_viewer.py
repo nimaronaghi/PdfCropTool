@@ -829,9 +829,10 @@ class PDFViewerApp:
             # Show detailed save information
             details = (f"Crop #{crop_number} saved successfully!\n\n"
                       f"File: {filename}\n"
-                      f"Resolution: {metadata['extraction_dpi']} DPI\n"
+                      f"Resolution: {metadata['extraction_dpi']} DPI (Native Scale: {metadata['native_scale']:.1f}x)\n"
                       f"Dimensions: {metadata['width_pixels']}×{metadata['height_pixels']} pixels\n"
                       f"Physical Size: {metadata['width_inches']}×{metadata['height_inches']} inches\n"
+                      f"Source: {metadata['source_quality']}\n"
                       f"Quality: {self._get_quality_rating(metadata['extraction_dpi'])}")
             
             messagebox.showinfo("Save Complete", details)

@@ -11,17 +11,14 @@ from pathlib import Path
 class ImageExtractor:
     """Class for extracting high-quality images from PDF documents"""
     
-    def __init__(self, pdf_document, target_dpi=300):
+    def __init__(self, pdf_document):
         """
         Initialize the image extractor
         
         Args:
             pdf_document: PyMuPDF document object
-            target_dpi: Target DPI for extraction (default: 300)
         """
         self.pdf_document = pdf_document
-        self.target_dpi = target_dpi
-        self.min_dpi = 150  # Minimum acceptable DPI
         
     def extract_crop(self, crop_data, output_path):
         """
@@ -42,11 +39,15 @@ class ImageExtractor:
             # Get the PDF page
             page = self.pdf_document[page_num]
             
-            # Calculate extraction parameters for target quality
+            # Calculate extraction parameters for maximum quality
             page_rect = page.rect
             
-            # Calculate optimal extraction scale based on target DPI
-            extraction_scale = max(self.target_dpi / 72, 2.0)  # Ensure minimum 2x scale
+            # Get the maximum resolution available from the PDF page
+            # First, check if the page has embedded images to determine native resolution
+            native_scale = self._get_page_native_scale(page)
+            
+            # Use the maximum scale between native content and a reasonable minimum
+            extraction_scale = max(native_scale, 4.0)  # At least 4x scale (288 DPI minimum)
             
             # Get actual output dimensions for verification
             crop_width = coords[2] - coords[0]  # in display pixels
@@ -84,13 +85,14 @@ class ImageExtractor:
             # Add extraction metadata to image
             metadata = {
                 'extraction_dpi': actual_dpi,
-                'target_dpi': self.target_dpi,
+                'native_scale': native_scale,
                 'width_pixels': pil_image.width,
                 'height_pixels': pil_image.height,
                 'width_inches': round(width_inches, 3),
                 'height_inches': round(height_inches, 3),
                 'page_number': page_num + 1,
-                'extraction_scale': round(extraction_scale, 2)
+                'extraction_scale': round(extraction_scale, 2),
+                'source_quality': 'Maximum Available from PDF'
             }
             
             # Save as PNG with maximum quality and comprehensive metadata
@@ -107,6 +109,65 @@ class ImageExtractor:
         except Exception as e:
             print(f"Error extracting crop: {str(e)}")
             return None
+            
+    def _get_page_native_scale(self, page):
+        """
+        Determine the native scale factor for maximum quality extraction
+        
+        Args:
+            page: PyMuPDF page object
+            
+        Returns:
+            float: Native scale factor for the page
+        """
+        try:
+            # Check for embedded images in the page to determine native resolution
+            image_list = page.get_images()
+            max_scale = 2.0  # Default minimum scale
+            
+            if image_list:
+                # Analyze embedded images to find the highest resolution
+                for img_index, img in enumerate(image_list):
+                    try:
+                        # Get image dimensions
+                        xref = img[0]
+                        base_image = self.pdf_document.extract_image(xref)
+                        
+                        img_width = base_image["width"]
+                        img_height = base_image["height"]
+                        
+                        # Get image placement on page
+                        img_dict = page.get_image_bbox(img)
+                        if img_dict:
+                            # Calculate the scale needed to match native image resolution
+                            page_width = img_dict.width
+                            page_height = img_dict.height
+                            
+                            scale_x = img_width / page_width if page_width > 0 else 1.0
+                            scale_y = img_height / page_height if page_height > 0 else 1.0
+                            
+                            # Use the higher scale factor
+                            img_scale = max(scale_x, scale_y)
+                            max_scale = max(max_scale, img_scale)
+                            
+                    except Exception:
+                        continue
+            
+            # Also consider text rendering quality - vector content can scale higher
+            # For vector content (text, drawings), we can use high scales
+            text_objects = page.get_text("dict")
+            has_text = len(text_objects.get("blocks", [])) > 0
+            
+            if has_text:
+                # For pages with text, we can safely scale to very high resolutions
+                max_scale = max(max_scale, 8.0)  # Up to 576 DPI for text
+            
+            # Cap at reasonable maximum to avoid huge files
+            return min(max_scale, 12.0)  # Max 864 DPI
+            
+        except Exception as e:
+            print(f"Error determining native scale: {e}")
+            return 4.0  # Default to 288 DPI
             
     def get_crop_preview_info(self, crop_data):
         """
@@ -125,8 +186,9 @@ class ImageExtractor:
             
             page = self.pdf_document[page_num]
             
-            # Calculate what the extraction parameters would be
-            extraction_scale = max(self.target_dpi / 72, 2.0)
+            # Calculate what the extraction parameters would be using native resolution
+            native_scale = self._get_page_native_scale(page)
+            extraction_scale = max(native_scale, 4.0)
             pdf_scale_factor = extraction_scale / (display_zoom * 2)
             
             # Calculate PDF coordinates
@@ -146,13 +208,14 @@ class ImageExtractor:
             
             return {
                 'estimated_dpi': actual_dpi,
-                'target_dpi': self.target_dpi,
+                'native_scale': native_scale,
                 'output_width': output_width,
                 'output_height': output_height,
                 'width_inches': round(width_inches, 3),
                 'height_inches': round(height_inches, 3),
                 'file_size_estimate': self._estimate_file_size(output_width, output_height),
-                'quality_rating': self._get_quality_rating(actual_dpi)
+                'quality_rating': self._get_quality_rating(actual_dpi),
+                'source_quality': 'Maximum from PDF Native Resolution'
             }
             
         except Exception as e:
