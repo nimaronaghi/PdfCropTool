@@ -39,45 +39,60 @@ class PDFViewerApp:
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Left panel with scrollbar for controls
-        self.left_scroll_frame = ttk.Frame(self.main_frame, width=250)
+        self.left_scroll_frame = ttk.Frame(self.main_frame, width=270)
         self.left_scroll_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
         self.left_scroll_frame.pack_propagate(False)
         
         # Create canvas and scrollbar for left panel
-        self.left_canvas = tk.Canvas(self.left_scroll_frame, highlightthickness=0)
+        self.left_canvas = tk.Canvas(self.left_scroll_frame, width=250, highlightthickness=0, bg="white")
         self.left_scrollbar = ttk.Scrollbar(self.left_scroll_frame, orient="vertical", command=self.left_canvas.yview)
         self.left_panel = ttk.Frame(self.left_canvas)
         
-        # Configure scrolling
-        self.left_panel.bind(
-            "<Configure>",
-            lambda e: self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
-        )
+        # Pack scrollbar first (on the right)
+        self.left_scrollbar.pack(side="right", fill="y")
+        # Then pack canvas (fills remaining space)
+        self.left_canvas.pack(side="left", fill="both", expand=True)
         
+        # Create window in canvas for the panel
         self.left_canvas_frame = self.left_canvas.create_window((0, 0), window=self.left_panel, anchor="nw")
+        
+        # Configure scrolling
         self.left_canvas.configure(yscrollcommand=self.left_scrollbar.set)
         
-        # Pack scrollbar components
-        self.left_canvas.pack(side="left", fill="both", expand=True)
-        self.left_scrollbar.pack(side="right", fill="y")
+        def _configure_scroll_region(event=None):
+            self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
+            # Also update the canvas window width to match the canvas
+            canvas_width = self.left_canvas.winfo_width()
+            self.left_canvas.itemconfig(self.left_canvas_frame, width=canvas_width)
+        
+        self.left_panel.bind("<Configure>", _configure_scroll_region)
+        self.left_canvas.bind("<Configure>", _configure_scroll_region)
         
         # Bind mouse wheel to left panel scrolling
         def _on_left_mousewheel(event):
-            # Only scroll if mouse is over the left panel
-            widget = event.widget
-            try:
-                # Check if the event is from a widget in the left panel
-                parent = widget
-                while parent:
-                    if parent == self.left_canvas or parent == self.left_panel:
+            # Check if mouse is over the left scroll area
+            x, y = self.root.winfo_pointerxy()
+            widget_under_mouse = self.root.winfo_containing(x, y)
+            
+            # Check if the widget is part of the left panel hierarchy
+            current = widget_under_mouse
+            while current:
+                if current == self.left_canvas or current == self.left_panel or current == self.left_scroll_frame:
+                    # Scroll the left canvas
+                    try:
                         self.left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-                        return "break"
-                    parent = parent.master
-            except:
-                pass
+                    except:
+                        pass
+                    return "break"
+                try:
+                    current = current.master
+                except:
+                    break
         
-        # Bind mousewheel globally and check source
-        self.root.bind_all("<MouseWheel>", _on_left_mousewheel, add="+")
+        # Bind mousewheel to the left panel components
+        self.left_canvas.bind("<MouseWheel>", _on_left_mousewheel)
+        self.left_panel.bind("<MouseWheel>", _on_left_mousewheel)
+        self.left_scroll_frame.bind("<MouseWheel>", _on_left_mousewheel)
         
         # Right panel for PDF display
         self.right_panel = ttk.Frame(self.main_frame)
