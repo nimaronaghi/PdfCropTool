@@ -51,8 +51,12 @@ class PDFViewerApp:
         # Visualization keywords for auto-highlighting
         self.viz_keywords = ['fig', 'Fig', 'figure', 'Figure', 'plot', 'Plot', 
                            'diagram', 'Diagram', 'chart', 'Chart', 'graph', 'Graph',
-                           'image', 'Image', 'illustration', 'Illustration']
+                           'image', 'Image', 'illustration', 'Illustration',
+                           'table', 'Table', 'equation', 'Equation', 'formula', 'Formula',
+                           'schema', 'Schema', 'flowchart', 'Flowchart', 'map', 'Map',
+                           'screenshot', 'Screenshot', 'photo', 'Photo', 'visual', 'Visual']
         self.viz_highlights = []  # List of visualization highlight rectangles
+        self.show_viz_highlights = True  # Control viz highlighting with checkbox
         
         self.setup_ui()
         self.setup_bindings()
@@ -144,11 +148,11 @@ class PDFViewerApp:
         # Setup control panels
         self.setup_control_panels()
         
-        # Setup search bar
-        self.setup_search_bar()
-        
         # Setup PDF viewer
         self.setup_pdf_viewer()
+        
+        # Setup search bar (after right panel is created)
+        self.setup_search_bar()
         
         # Status bar
         self.setup_status_bar()
@@ -329,7 +333,14 @@ class PDFViewerApp:
         continuous_check = ttk.Checkbutton(search_frame, text="Continuous Scroll", 
                                          variable=self.continuous_var, 
                                          command=self.toggle_view_mode)
-        continuous_check.pack(side=tk.LEFT)
+        continuous_check.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Visualization highlighting toggle
+        self.viz_highlight_var = tk.BooleanVar(value=True)
+        viz_check = ttk.Checkbutton(search_frame, text="Auto-highlight Keywords", 
+                                   variable=self.viz_highlight_var, 
+                                   command=self.toggle_viz_highlighting)
+        viz_check.pack(side=tk.LEFT)
         
     def setup_pdf_viewer(self):
         """Setup the PDF viewer canvas"""
@@ -478,7 +489,8 @@ class PDFViewerApp:
         self.update_navigation()
         
         # Auto-highlight visualization keywords
-        self.highlight_visualization_keywords()
+        if hasattr(self, 'viz_highlight_var'):
+            self.highlight_visualization_keywords()
         
     def _pdf_load_error_callback(self, error_msg):
         """Callback when PDF loading fails"""
@@ -762,9 +774,19 @@ class PDFViewerApp:
                 tags="search_highlight"
             )
     
+    def toggle_viz_highlighting(self):
+        """Toggle visualization keyword highlighting"""
+        self.show_viz_highlights = self.viz_highlight_var.get()
+        
+        if self.show_viz_highlights:
+            self.highlight_visualization_keywords()
+        else:
+            self.canvas.delete("viz_highlight")
+            self.viz_highlights = []
+
     def highlight_visualization_keywords(self):
         """Auto-highlight visualization keywords"""
-        if not self.pdf_document:
+        if not self.pdf_document or not self.show_viz_highlights:
             return
         
         # Clear previous viz highlights
@@ -806,10 +828,10 @@ class PDFViewerApp:
     
     def pdf_to_display_coords(self, pdf_rect):
         """Convert PDF coordinates to display coordinates (single page mode)"""
-        if not hasattr(self, 'current_image'):
+        if not hasattr(self, 'current_image') and not hasattr(self, 'page_images'):
             return None
         
-        # Scale factor from PDF to display
+        # Scale factor from PDF to display  
         scale_factor = self.zoom_level * 2
         
         return (
@@ -821,10 +843,10 @@ class PDFViewerApp:
     
     def pdf_to_continuous_coords(self, pdf_rect, page_num):
         """Convert PDF coordinates to display coordinates (continuous mode)"""
-        if page_num >= len(self.page_positions):
+        if not hasattr(self, 'page_positions') or page_num >= len(self.page_positions):
             return None
         
-        # Scale factor from PDF to display
+        # Scale factor from PDF to display  
         scale_factor = self.zoom_level * 2
         
         # Get page position offset
@@ -1098,22 +1120,38 @@ class PDFViewerApp:
             right = max(x1, x2)
             bottom = max(y1, y2)
             
-            # Convert display coordinates to normalized PDF coordinates immediately
-            # This ensures all crops use the same coordinate system regardless of zoom
+            # Convert display coordinates to PDF coordinates for storage
             display_scale = self.zoom_level * 2.0  # Current display scale
             
             # Convert to PDF coordinates (normalized, zoom-independent)
-            pdf_left = left / display_scale
-            pdf_top = top / display_scale
-            pdf_right = right / display_scale
-            pdf_bottom = bottom / display_scale
+            if self.continuous_mode:
+                # Find which page this crop belongs to
+                crop_page = self.find_page_from_y_coord(top)
+                if crop_page is not None and crop_page < len(self.page_positions):
+                    page_y_offset = self.page_positions[crop_page]
+                    pdf_left = left / display_scale
+                    pdf_top = (top - page_y_offset) / display_scale
+                    pdf_right = right / display_scale
+                    pdf_bottom = (bottom - page_y_offset) / display_scale
+                else:
+                    crop_page = self.current_page
+                    pdf_left = left / display_scale
+                    pdf_top = top / display_scale
+                    pdf_right = right / display_scale
+                    pdf_bottom = bottom / display_scale
+            else:
+                crop_page = self.current_page
+                pdf_left = left / display_scale
+                pdf_top = top / display_scale
+                pdf_right = right / display_scale
+                pdf_bottom = bottom / display_scale
             
             # Generate adaptive default name based on learned patterns
             default_name = self.get_adaptive_crop_name()
             
             # Store crops with PDF coordinates and display coordinates for drawing
             crop_data = {
-                'page': self.current_page,
+                'page': crop_page if self.continuous_mode else self.current_page,
                 'coords': (left, top, right, bottom),  # Display coords for drawing rectangles
                 'pdf_coords': (pdf_left, pdf_top, pdf_right, pdf_bottom),  # PDF coords for extraction
                 'zoom': self.zoom_level,  # Zoom level when created (for display only)
@@ -1126,6 +1164,9 @@ class PDFViewerApp:
             
             # Update crop list
             self.crop_frame.update_crop_list(self.crop_selections)
+            
+            # Redraw all crop rectangles to ensure proper display
+            self.redraw_crop_rectangles()
             
         self.cropping = False
         self.crop_start = None
@@ -1167,18 +1208,25 @@ class PDFViewerApp:
                 coords = crop['coords']
                 left, top, right, bottom = coords
             
-            rect = self.canvas.create_rectangle(
-                left, top, right, bottom,
-                outline="blue", width=2, tags="saved_crop"
-            )
+            # Ensure we have valid coordinates (debug print)
+            width = right - left
+            height = bottom - top
             
-            # Add crop number label
-            center_x = (left + right) / 2
-            center_y = top + 15
-            self.canvas.create_text(
-                center_x, center_y, text=f"#{i+1}",
-                fill="blue", font=("Arial", 10, "bold"), tags="saved_crop"
-            )
+            if width > 5 and height > 5:  # More lenient minimum size
+                rect = self.canvas.create_rectangle(
+                    left, top, right, bottom,
+                    outline="red", width=3, tags="saved_crop", fill=""
+                )
+                
+                # Add crop number label
+                center_x = (left + right) / 2
+                center_y = top + 15
+                self.canvas.create_text(
+                    center_x, center_y, text=f"#{i+1}",
+                    fill="red", font=("Arial", 12, "bold"), tags="saved_crop"
+                )
+            else:
+                print(f"CROP TOO SMALL: width={width}, height={height}, coords=({left}, {top}, {right}, {bottom})")
                 
     def select_output_directory(self):
         """Select output directory for exported images"""
