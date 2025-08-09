@@ -58,6 +58,9 @@ class CropFrame(ttk.LabelFrame):
         # Bind selection events
         self.crop_listbox.bind('<<ListboxSelect>>', self.on_selection_change)
         
+        # Bind double-click for renaming (Windows-like behavior)
+        self.crop_listbox.bind('<Double-Button-1>', self.on_double_click_rename)
+        
     def update_crop_list(self, crop_selections):
         """Update the crop list display with quality information"""
         self.crop_listbox.delete(0, tk.END)
@@ -222,6 +225,31 @@ class CropFrame(ttk.LabelFrame):
         button_frame.pack(fill=tk.X, pady=(10, 0))
         
         def save_name():
+            new_name = name_var.get().strip()
+            if new_name:
+                self.app.crop_selections[crop_index]['custom_name'] = new_name
+                self.update_crop_list(self.app.crop_selections)
+            dialog.destroy()
+            
+        def cancel():
+            dialog.destroy()
+            
+        # Handle Enter key
+        def on_enter(event):
+            save_name()
+            
+        name_entry.bind('<Return>', on_enter)
+        
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="OK", command=save_name).pack(side=tk.RIGHT)
+        
+    def on_double_click_rename(self, event):
+        """Handle double-click renaming like Windows folders"""
+        selection = self.crop_listbox.curselection()
+        if selection:
+            crop_index = selection[0]
+            if crop_index < len(self.app.crop_selections):
+                self.show_rename_dialog(crop_index)
             new_name = name_var.get().strip()
             if new_name:
                 # Remove file extension if user added one

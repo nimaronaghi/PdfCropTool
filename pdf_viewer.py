@@ -242,14 +242,7 @@ class PDFViewerApp:
         self.naming_frame = NamingFrame(self.left_panel, self)
         self.naming_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Output directory frame
-        output_frame = ttk.LabelFrame(self.left_panel, text="Export Settings", padding=10)
-        output_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.output_label = ttk.Label(output_frame, text="No output folder selected", foreground="gray")
-        self.output_label.pack(fill=tk.X, pady=2)
-        
-        ttk.Button(output_frame, text="Export All Crops", command=self.export_all_crops).pack(fill=tk.X, pady=2)
+
         
         # Export frame
         export_frame = ttk.LabelFrame(self.left_panel, text="Export", padding=10)
@@ -361,9 +354,11 @@ class PDFViewerApp:
     def _pdf_loaded_callback(self, pdf_doc, file_path):
         """Callback when PDF is successfully loaded"""
         self.pdf_document = pdf_doc
+        self.current_file_path = file_path  # Store for default naming
         self.current_page = 0
         self.pdf_images = []
         self.crop_selections = []
+        self.crop_history = []
         
         # Update UI
         self.progress_bar.stop()
@@ -697,12 +692,16 @@ class PDFViewerApp:
             pdf_right = right / display_scale
             pdf_bottom = bottom / display_scale
             
+            # Generate default name: [PDF filename without .pdf] + [0001]
+            default_name = self.get_default_crop_name()
+            
             # Store crops with PDF coordinates and display coordinates for drawing
             crop_data = {
                 'page': self.current_page,
                 'coords': (left, top, right, bottom),  # Display coords for drawing rectangles
                 'pdf_coords': (pdf_left, pdf_top, pdf_right, pdf_bottom),  # PDF coords for extraction
-                'zoom': self.zoom_level  # Zoom level when created (for display only)
+                'zoom': self.zoom_level,  # Zoom level when created (for display only)
+                'custom_name': default_name  # Default naming format
             }
             self.crop_selections.append(crop_data)
             
@@ -975,19 +974,22 @@ class PDFViewerApp:
     def load_pdf_from_url(self):
         """Load PDF from URL (supports Google Drive direct download links)"""
         url = simpledialog.askstring("Load PDF from URL", 
-                                    "Enter PDF URL:\n(For Google Drive: File → Share → Copy link,\nthen replace '/view' with '/export?format=pdf')")
+                                    "Enter PDF URL:\n(Google Drive links will be auto-converted)")
         if not url:
             return
             
-        # Convert Google Drive share links to direct download links
-        if "drive.google.com" in url:
+        # Convert Google Drive share links to direct download links automatically
+        if "drive.google.com" in url and "/file/d/" in url:
+            # Extract file ID from various Google Drive URL formats
+            file_id = url.split("/file/d/")[1].split("/")[0]
+            url = f"https://drive.google.com/uc?export=download&id={file_id}"
+            messagebox.showinfo("URL Converted", f"Google Drive URL automatically converted for download.\nFile ID: {file_id}")
+        elif "drive.google.com" in url:
+            # Handle other Google Drive formats
             if "/view" in url:
                 url = url.replace("/view?usp=sharing", "/export?format=pdf")
+                url = url.replace("/view?usp=drivesdk", "/export?format=pdf")  
                 url = url.replace("/view", "/export?format=pdf")
-            elif "/file/d/" in url:
-                # Extract file ID and create direct download link
-                file_id = url.split("/file/d/")[1].split("/")[0]
-                url = f"https://drive.google.com/uc?export=download&id={file_id}"
         
         self.status_label.config(text="Downloading PDF...")
         self.progress_bar.pack(side=tk.RIGHT, padx=(10, 0))
@@ -1020,6 +1022,7 @@ class PDFViewerApp:
         try:
             # Load the PDF
             self.pdf_document = fitz.open(temp_path)
+            self.current_file_path = temp_path  # Store temp path for default naming
             self.current_page = 0
             self.pdf_images = []
             self.crop_selections = []
@@ -1161,3 +1164,16 @@ class PDFViewerApp:
         self.root.bind("<End>", lambda e: self.last_page())
         self.root.bind("<Page_Up>", lambda e: self.previous_page())
         self.root.bind("<Page_Down>", lambda e: self.next_page())
+        
+    def get_default_crop_name(self):
+        """Generate default crop name: [PDF filename without .pdf] + [0001]"""
+        # Get PDF filename without extension
+        if hasattr(self, 'current_file_path') and self.current_file_path:
+            pdf_name = os.path.splitext(os.path.basename(self.current_file_path))[0]
+        else:
+            pdf_name = "pdf"
+            
+        # Count existing crops to get next number
+        crop_count = len(self.crop_selections) + 1
+        
+        return f"{pdf_name}{crop_count:04d}"
