@@ -43,10 +43,7 @@ class PDFViewerApp:
         self.total_height = 0    # Total height of all pages
         self.page_gap = 20       # Gap between pages in continuous mode
         
-        # Text search system
-        self.search_results = []  # List of search result rectangles
-        self.current_search_index = 0  # Current highlighted search result
-        self.search_text = ""     # Current search term
+        # Search system removed - only keeping visualization highlighting
         
         # Visualization keywords for auto-highlighting
         self.viz_keywords = ['fig', 'Fig', 'figure', 'Figure', 'plot', 'Plot', 
@@ -151,8 +148,8 @@ class PDFViewerApp:
         # Setup PDF viewer
         self.setup_pdf_viewer()
         
-        # Setup search bar (after right panel is created)
-        self.setup_search_bar()
+        # Setup visualization highlighting controls
+        self.setup_highlighting_controls()
         
         # Status bar
         self.setup_status_bar()
@@ -302,42 +299,22 @@ class PDFViewerApp:
         if hasattr(self, '_bind_mousewheel_recursive'):
             self._bind_mousewheel_recursive(self.left_scroll_frame)
     
-    def setup_search_bar(self):
-        """Setup the search bar in the right panel"""
-        # Search frame at the top of the right panel
-        search_frame = ttk.Frame(self.right_panel)
-        search_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # Search input
-        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(5, 5))
-        
-        self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
-        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
-        self.search_entry.bind('<Return>', self.search_text)
-        
-        # Search buttons
-        ttk.Button(search_frame, text="Search", command=self.search_text).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(search_frame, text="Next", command=self.next_search_result).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(search_frame, text="Prev", command=self.prev_search_result).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(search_frame, text="Clear", command=self.clear_search).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Search status
-        self.search_status = ttk.Label(search_frame, text="", foreground="gray")
-        self.search_status.pack(side=tk.LEFT, padx=(10, 0))
+    def setup_highlighting_controls(self):
+        """Setup the highlighting and view controls in the right panel"""
+        # Control frame at the top of the right panel
+        control_frame = ttk.Frame(self.right_panel)
+        control_frame.pack(fill=tk.X, pady=(0, 5))
         
         # View mode toggle
-        ttk.Separator(search_frame, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=(10, 10))
-        
         self.continuous_var = tk.BooleanVar(value=True)
-        continuous_check = ttk.Checkbutton(search_frame, text="Continuous Scroll", 
+        continuous_check = ttk.Checkbutton(control_frame, text="Continuous Scroll", 
                                          variable=self.continuous_var, 
                                          command=self.toggle_view_mode)
-        continuous_check.pack(side=tk.LEFT, padx=(0, 10))
+        continuous_check.pack(side=tk.LEFT, padx=(5, 20))
         
         # Visualization highlighting toggle
         self.viz_highlight_var = tk.BooleanVar(value=True)
-        viz_check = ttk.Checkbutton(search_frame, text="Auto-highlight Keywords", 
+        viz_check = ttk.Checkbutton(control_frame, text="Auto-highlight Keywords", 
                                    variable=self.viz_highlight_var, 
                                    command=self.toggle_viz_highlighting)
         viz_check.pack(side=tk.LEFT)
@@ -638,8 +615,8 @@ class PDFViewerApp:
         if not self.pdf_document:
             return
         
-        # Clear existing highlights
-        self.clear_search()
+        # Clear any existing search highlights
+        self.canvas.delete("search_highlight")
         
         # Re-render in new mode
         if self.continuous_mode:
@@ -650,129 +627,7 @@ class PDFViewerApp:
         # Reapply highlights
         self.highlight_visualization_keywords()
     
-    def search_text(self, event=None):
-        """Search for text in the PDF"""
-        search_term = self.search_var.get().strip()
-        
-        if not search_term or not self.pdf_document:
-            return
-        
-        # Clear previous search results
-        self.clear_search()
-        
-        self.search_text = search_term
-        self.search_results = []
-        
-        # Search through all pages
-        for page_num in range(len(self.pdf_document)):
-            page = self.pdf_document[page_num]
-            
-            # Search for text instances
-            text_instances = page.search_for(search_term)
-            
-            for inst in text_instances:
-                # Convert PDF coordinates to display coordinates
-                if self.continuous_mode:
-                    display_coords = self.pdf_to_continuous_coords(inst, page_num)
-                else:
-                    if page_num == self.current_page:
-                        display_coords = self.pdf_to_display_coords(inst)
-                    else:
-                        continue  # Skip non-visible pages in single page mode
-                
-                if display_coords:
-                    self.search_results.append({
-                        'coords': display_coords,
-                        'page': page_num,
-                        'pdf_coords': inst
-                    })
-        
-        # Highlight search results
-        self.highlight_search_results()
-        
-        # Update search status
-        if self.search_results:
-            self.current_search_index = 0
-            self.search_status.config(text=f"Found {len(self.search_results)} results")
-            self.scroll_to_search_result(0)
-        else:
-            self.search_status.config(text="No results found")
-    
-    def next_search_result(self):
-        """Navigate to next search result"""
-        if not self.search_results:
-            return
-        
-        self.current_search_index = (self.current_search_index + 1) % len(self.search_results)
-        self.scroll_to_search_result(self.current_search_index)
-    
-    def prev_search_result(self):
-        """Navigate to previous search result"""
-        if not self.search_results:
-            return
-        
-        self.current_search_index = (self.current_search_index - 1) % len(self.search_results)
-        self.scroll_to_search_result(self.current_search_index)
-    
-    def scroll_to_search_result(self, index):
-        """Scroll to a specific search result"""
-        if not self.search_results or index >= len(self.search_results):
-            return
-        
-        result = self.search_results[index]
-        coords = result['coords']
-        
-        # Calculate center position for scrolling
-        center_x = (coords[0] + coords[2]) / 2
-        center_y = (coords[1] + coords[3]) / 2
-        
-        # Get canvas dimensions
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        
-        if canvas_width > 1 and canvas_height > 1:
-            # Get scroll region
-            scroll_region = self.canvas.cget("scrollregion").split()
-            if len(scroll_region) == 4:
-                total_width = float(scroll_region[2])
-                total_height = float(scroll_region[3])
-                
-                # Calculate scroll positions (0.0 to 1.0)
-                scroll_x = max(0, min(1, (center_x - canvas_width/2) / total_width))
-                scroll_y = max(0, min(1, (center_y - canvas_height/2) / total_height))
-                
-                # Scroll to position
-                self.canvas.xview_moveto(scroll_x)
-                self.canvas.yview_moveto(scroll_y)
-        
-        # Update status
-        self.search_status.config(text=f"Result {index + 1} of {len(self.search_results)}")
-        
-        # Highlight current result
-        self.highlight_search_results(current_index=index)
-    
-    def highlight_search_results(self, current_index=None):
-        """Highlight search results on canvas"""
-        # Remove previous search highlights
-        self.canvas.delete("search_highlight")
-        
-        for i, result in enumerate(self.search_results):
-            coords = result['coords']
-            
-            # Use different color for current result
-            if current_index is not None and i == current_index:
-                color = "red"
-                width = 3
-            else:
-                color = "yellow"
-                width = 2
-            
-            # Create highlight rectangle
-            self.canvas.create_rectangle(
-                coords[0], coords[1], coords[2], coords[3],
-                outline=color, fill="", width=width, 
-                tags="search_highlight"
-            )
+
     
     def toggle_viz_highlighting(self):
         """Toggle visualization keyword highlighting"""
@@ -859,13 +714,7 @@ class PDFViewerApp:
             pdf_rect[3] * scale_factor + page_y_offset   # bottom (with page offset)
         )
     
-    def clear_search(self):
-        """Clear search results and highlights"""
-        self.search_results = []
-        self.current_search_index = 0
-        self.search_text = ""
-        self.search_status.config(text="")
-        self.canvas.delete("search_highlight")
+
             
     def update_navigation(self):
         """Update navigation controls"""
@@ -1184,15 +1033,16 @@ class PDFViewerApp:
                 
                 # Calculate display coordinates based on view mode
                 if self.continuous_mode:
-                    # Continuous mode: use page offset
-                    if crop_page < len(self.page_positions):
+                    # Continuous mode: use page offset if available
+                    if hasattr(self, 'page_positions') and crop_page < len(self.page_positions):
                         page_y_offset = self.page_positions[crop_page]
                         left = pdf_coords[0] * current_scale
                         top = pdf_coords[1] * current_scale + page_y_offset
                         right = pdf_coords[2] * current_scale
                         bottom = pdf_coords[3] * current_scale + page_y_offset
                     else:
-                        continue  # Skip if page position not available
+                        # Fallback: skip this crop if page positions aren't available
+                        continue
                 else:
                     # Single page mode: only show crops for current page
                     if crop_page != self.current_page:
@@ -1680,10 +1530,7 @@ class PDFViewerApp:
         self.root.bind('<Delete>', lambda e: self.delete_selected_crop())
         self.root.bind('<BackSpace>', lambda e: self.delete_selected_crop())
         
-        # Search operations
-        self.root.bind('<Control-f>', lambda e: self.search_entry.focus())
-        self.root.bind('<F3>', lambda e: self.next_search_result())
-        self.root.bind('<Shift-F3>', lambda e: self.prev_search_result())
+        # Remove search keyboard bindings (search feature removed)
         
         # Navigation shortcuts
         self.root.bind("<Left>", lambda e: self.previous_page())
