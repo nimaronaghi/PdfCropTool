@@ -38,10 +38,46 @@ class PDFViewerApp:
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Left panel for controls
-        self.left_panel = ttk.Frame(self.main_frame, width=250)
-        self.left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
-        self.left_panel.pack_propagate(False)
+        # Left panel with scrollbar for controls
+        self.left_scroll_frame = ttk.Frame(self.main_frame, width=250)
+        self.left_scroll_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
+        self.left_scroll_frame.pack_propagate(False)
+        
+        # Create canvas and scrollbar for left panel
+        self.left_canvas = tk.Canvas(self.left_scroll_frame, highlightthickness=0)
+        self.left_scrollbar = ttk.Scrollbar(self.left_scroll_frame, orient="vertical", command=self.left_canvas.yview)
+        self.left_panel = ttk.Frame(self.left_canvas)
+        
+        # Configure scrolling
+        self.left_panel.bind(
+            "<Configure>",
+            lambda e: self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
+        )
+        
+        self.left_canvas_frame = self.left_canvas.create_window((0, 0), window=self.left_panel, anchor="nw")
+        self.left_canvas.configure(yscrollcommand=self.left_scrollbar.set)
+        
+        # Pack scrollbar components
+        self.left_canvas.pack(side="left", fill="both", expand=True)
+        self.left_scrollbar.pack(side="right", fill="y")
+        
+        # Bind mouse wheel to left panel scrolling
+        def _on_left_mousewheel(event):
+            # Only scroll if mouse is over the left panel
+            widget = event.widget
+            try:
+                # Check if the event is from a widget in the left panel
+                parent = widget
+                while parent:
+                    if parent == self.left_canvas or parent == self.left_panel:
+                        self.left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                        return "break"
+                    parent = parent.master
+            except:
+                pass
+        
+        # Bind mousewheel globally and check source
+        self.root.bind_all("<MouseWheel>", _on_left_mousewheel, add="+")
         
         # Right panel for PDF display
         self.right_panel = ttk.Frame(self.main_frame)
@@ -385,6 +421,10 @@ class PDFViewerApp:
             
             # Update scroll region
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Reset scroll position to top-left when changing pages
+            self.canvas.xview_moveto(0)
+            self.canvas.yview_moveto(0)
             
             # Redraw existing crop rectangles
             self.redraw_crop_rectangles()
