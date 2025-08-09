@@ -37,7 +37,7 @@ class PDFViewerApp:
         self.naming_learning_enabled = True
         
         # Continuous scrolling system
-        self.continuous_mode = True  # Enable continuous scrolling by default
+        self.continuous_mode = False  # Disable continuous scrolling by default
         self.page_positions = []  # Y positions of each page in continuous view
         self.page_heights = []   # Height of each page
         self.total_height = 0    # Total height of all pages
@@ -53,7 +53,7 @@ class PDFViewerApp:
                            'schema', 'Schema', 'flowchart', 'Flowchart', 'map', 'Map',
                            'screenshot', 'Screenshot', 'photo', 'Photo', 'visual', 'Visual']
         self.viz_highlights = []  # List of visualization highlight rectangles
-        self.show_viz_highlights = True  # Control viz highlighting with checkbox
+        self.show_viz_highlights = False  # Control viz highlighting with checkbox (OFF by default)
         
         self.setup_ui()
         self.setup_bindings()
@@ -306,14 +306,14 @@ class PDFViewerApp:
         control_frame.pack(fill=tk.X, pady=(0, 5))
         
         # View mode toggle
-        self.continuous_var = tk.BooleanVar(value=True)
+        self.continuous_var = tk.BooleanVar(value=False)
         continuous_check = ttk.Checkbutton(control_frame, text="Continuous Scroll", 
                                          variable=self.continuous_var, 
                                          command=self.toggle_view_mode)
         continuous_check.pack(side=tk.LEFT, padx=(5, 20))
         
         # Visualization highlighting toggle
-        self.viz_highlight_var = tk.BooleanVar(value=True)
+        self.viz_highlight_var = tk.BooleanVar(value=False)
         viz_check = ttk.Checkbutton(control_frame, text="Auto-highlight Keywords", 
                                    variable=self.viz_highlight_var, 
                                    command=self.toggle_viz_highlighting)
@@ -721,6 +721,29 @@ class PDFViewerApp:
             pdf_rect[2] * scale_factor,  # right
             pdf_rect[3] * scale_factor + page_y_offset   # bottom (with page offset)
         )
+    
+    def find_page_from_y_coord(self, y_coord):
+        """Find which page a Y coordinate belongs to in continuous mode"""
+        if not hasattr(self, 'page_positions') or not self.page_positions:
+            return 0  # Default to first page if no positions available
+        
+        # Find the page that contains this Y coordinate
+        for page_num in range(len(self.page_positions)):
+            page_start_y = self.page_positions[page_num]
+            
+            # Get page end Y coordinate
+            if page_num < len(self.page_heights):
+                page_height = self.page_heights[page_num]
+                page_end_y = page_start_y + page_height
+            else:
+                page_end_y = page_start_y + 500  # Default height if not available
+            
+            # Check if Y coordinate falls within this page
+            if page_start_y <= y_coord <= page_end_y:
+                return page_num
+        
+        # If not found, return the last page
+        return len(self.page_positions) - 1 if self.page_positions else 0
     
 
             
