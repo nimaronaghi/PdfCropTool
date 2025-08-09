@@ -29,7 +29,7 @@ class PDFViewerApp:
         self.crop_selections = []  # List of crop selections
         self.output_directory = ""
         self.naming_pattern = "Q{:04d}"
-        self.use_sequential_naming = True
+        self.use_sequential_naming = False
         
         self.setup_ui()
         self.setup_bindings()

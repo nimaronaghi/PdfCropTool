@@ -368,7 +368,7 @@ class NamingFrame(ttk.LabelFrame):
         controls_frame.pack(fill=tk.X, pady=(10, 0))
         
         # Sequential naming checkbox
-        self.use_sequential = tk.BooleanVar(value=True)
+        self.use_sequential = tk.BooleanVar(value=False)
         self.sequential_check = ttk.Checkbutton(controls_frame, text="Use Sequential Naming", 
                                               variable=self.use_sequential,
                                               command=self.on_sequential_change)
