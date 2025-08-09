@@ -73,7 +73,7 @@ That's it! The application window will open ready to use.
 
 #### Mouse Controls
 - **Left click + drag** - Create crop selection
-- **Double-click crop** - Rename crop
+- **Double-click crop** - Rename crop (immediate, no delay)
 - **Mouse wheel** - Scroll through interface
 
 ### View Options

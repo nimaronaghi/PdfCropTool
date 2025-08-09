@@ -58,11 +58,8 @@ class CropFrame(ttk.LabelFrame):
         # Bind selection events
         self.crop_listbox.bind('<<ListboxSelect>>', self.on_selection_change)
         
-        # Windows-style renaming: slow double-click and F2 key
-        self.last_click_time = 0
-        self.last_click_index = -1
-        self.crop_listbox.bind('<Button-1>', self.on_single_click)
-        self.crop_listbox.bind('<Double-Button-1>', self.on_fast_double_click)
+        # Direct double-click renaming (no delay) and F2 key
+        self.crop_listbox.bind('<Double-Button-1>', self.on_double_click_rename)
         
         # F2 key for renaming (bind to the main app window)
         self.app.root.bind('<F2>', self.on_f2_rename)
@@ -306,39 +303,22 @@ class CropFrame(ttk.LabelFrame):
         # Make Save button default
         dialog.bind('<Return>', on_enter)
         
-    def on_single_click(self, event):
-        """Handle single click to detect slow double-click (Windows-style renaming)"""
-        import time
-        
+    def on_double_click_rename(self, event):
+        """Handle immediate double-click to rename crop"""
         # Get the clicked item
         clicked_index = self.crop_listbox.nearest(event.y)
-        current_time = time.time()
         
-        # Check for slow double-click (between 0.5 and 1.5 seconds)
-        if (self.last_click_index == clicked_index and 
-            0.5 <= current_time - self.last_click_time <= 1.5):
-            # This is a slow double-click - trigger rename
-            if clicked_index < len(self.app.crop_selections):
-                self.show_rename_dialog(clicked_index)
-            return
-        
-        # Update tracking variables
-        self.last_click_time = current_time
-        self.last_click_index = clicked_index
-        
-    def on_fast_double_click(self, event):
-        """Handle fast double-click (navigation, not renaming)"""
-        # Fast double-click should not trigger rename, just selection/navigation
-        selection = self.crop_listbox.curselection()
-        if selection:
-            # Navigate to the page containing the selected crop
-            crop_index = selection[0]
-            if crop_index < len(self.app.crop_selections):
-                crop_page = self.app.crop_selections[crop_index]['page']
-                if crop_page != self.app.current_page:
-                    self.app.current_page = crop_page
-                    self.app.render_current_page()
-                    self.app.update_navigation()
+        # Ensure the item is valid and within range
+        if 0 <= clicked_index < len(self.app.crop_selections):
+            # Select the item first
+            self.crop_listbox.selection_clear(0, tk.END)
+            self.crop_listbox.selection_set(clicked_index)
+            self.crop_listbox.activate(clicked_index)
+            
+            # Trigger rename dialog immediately
+            self.show_rename_dialog(clicked_index)
+            
+        return "break"  # Prevent further event processing
                     
     def on_f2_rename(self, event):
         """Handle F2 key for renaming selected crop (Windows-style)"""

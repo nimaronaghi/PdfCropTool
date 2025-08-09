@@ -9,6 +9,7 @@ PDF Figure Extractor is a Windows desktop application designed to extract high-q
 ### Major Changes
 - **Zoom Functionality Removed**: Disabled all zoom controls (buttons, menu items, keyboard shortcuts) due to display issues while preserving cropping functionality at optimal fixed scale
 - **Comprehensive Documentation Added**: Created detailed README.md with installation, usage instructions, and troubleshooting guide
+- **Enhanced Double-Click Rename**: Made crop renaming work immediately on double-click without delay for better user experience
 
 ## User Preferences
 
