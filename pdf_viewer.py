@@ -1006,7 +1006,7 @@ class PDFViewerApp:
             bottom = max(y1, y2)
             
             # Convert display coordinates to PDF coordinates for storage
-            display_scale = self.zoom_level * 2.0  # Current display scale
+            display_scale = max(self.zoom_level * 2.0, 0.1)  # Ensure positive scale, minimum 0.1
             
             # Convert to PDF coordinates (normalized, zoom-independent)
             if self.continuous_mode:
@@ -1094,11 +1094,17 @@ class PDFViewerApp:
                 coords = crop['coords']
                 left, top, right, bottom = coords
             
-            # Ensure we have valid coordinates (debug print)
-            width = right - left
-            height = bottom - top
+            # Ensure we have valid coordinates
+            width = abs(right - left)
+            height = abs(bottom - top)
             
-            if width > 5 and height > 5:  # More lenient minimum size
+            # Normalize coordinates to handle negative dimensions
+            left = min(left, right)
+            right = max(left + width, left)
+            top = min(top, bottom)  
+            bottom = max(top + height, top)
+            
+            if width > 5 and height > 5:  # Valid minimum size
                 rect = self.canvas.create_rectangle(
                     left, top, right, bottom,
                     outline="red", width=3, tags="saved_crop", fill=""
@@ -1580,7 +1586,9 @@ class PDFViewerApp:
         """Generate default crop name: [PDF filename without .pdf] + [_Q0001]"""
         # Get PDF filename without extension
         if hasattr(self, 'current_file_path') and self.current_file_path:
-            pdf_name = os.path.splitext(os.path.basename(self.current_file_path))[0]
+            # Handle both string paths and Path objects
+            file_path = str(self.current_file_path)
+            pdf_name = os.path.splitext(os.path.basename(file_path))[0]
         else:
             pdf_name = "pdf"
             
