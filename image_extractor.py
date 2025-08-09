@@ -57,15 +57,16 @@ class ImageExtractor:
             # Get page dimensions for coordinate validation
             page_rect = page.rect
             
-            # Convert display coordinates to PDF coordinates more carefully
-            # The display uses 2x scale for rendering, so we need to account for that
-            display_scale = display_zoom * 2.0
+            # Convert display coordinates to PDF coordinates
+            # The display rendering uses: zoom_level * 2 (for high DPI)
+            display_render_scale = display_zoom * 2.0
             
-            # Calculate PDF coordinates relative to the page
-            pdf_left = (coords[0] / display_scale) * (page_rect.width / page_rect.width)
-            pdf_top = (coords[1] / display_scale) * (page_rect.height / page_rect.height)
-            pdf_right = (coords[2] / display_scale) * (page_rect.width / page_rect.width)
-            pdf_bottom = (coords[3] / display_scale) * (page_rect.height / page_rect.height)
+            # Convert display pixel coordinates to PDF coordinates
+            # Display coordinates are in pixels at the current zoom/render scale
+            pdf_left = coords[0] / display_render_scale
+            pdf_top = coords[1] / display_render_scale  
+            pdf_right = coords[2] / display_render_scale
+            pdf_bottom = coords[3] / display_render_scale
             
             # Ensure coordinates are within page bounds
             pdf_left = max(0, min(pdf_left, page_rect.width))
@@ -248,13 +249,21 @@ class ImageExtractor:
             # Calculate what the extraction parameters would be using native resolution
             native_scale = self._get_page_native_scale(page)
             extraction_scale = max(native_scale, 4.0)
-            pdf_scale_factor = extraction_scale / (display_zoom * 2)
             
-            # Calculate PDF coordinates
-            pdf_width = (coords[2] - coords[0]) * pdf_scale_factor
-            pdf_height = (coords[3] - coords[1]) * pdf_scale_factor
+            # Convert display coordinates to PDF coordinates for preview
+            display_render_scale = display_zoom * 2.0
             
-            # Calculate final output dimensions
+            # Calculate PDF coordinates from display coordinates
+            pdf_left = coords[0] / display_render_scale
+            pdf_top = coords[1] / display_render_scale
+            pdf_right = coords[2] / display_render_scale
+            pdf_bottom = coords[3] / display_render_scale
+            
+            # Calculate PDF dimensions
+            pdf_width = pdf_right - pdf_left
+            pdf_height = pdf_bottom - pdf_top
+            
+            # Calculate final output dimensions at extraction scale
             output_width = int(pdf_width * extraction_scale)
             output_height = int(pdf_height * extraction_scale)
             
