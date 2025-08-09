@@ -227,11 +227,13 @@ class ControlFrame(ttk.Frame):
         
         shortcuts = [
             "Ctrl+O: Open PDF",
+            "Ctrl+G: Go to page",
+            "←/→: Previous/Next page",
+            "Home/End: First/Last page",
+            "PgUp/PgDn: Navigate pages",
             "Ctrl+W: Fit to width",
-            "Ctrl+Plus: Zoom in",
-            "Ctrl+Minus: Zoom out",
-            "←/→: Navigate pages",
-            "Click+Drag: Select crop area"
+            "Ctrl+Plus/Minus: Zoom",
+            "Click+Drag: Select crop"
         ]
         
         for shortcut in shortcuts:

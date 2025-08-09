@@ -104,17 +104,52 @@ class PDFViewerApp:
         nav_frame = ttk.LabelFrame(self.left_panel, text="Navigation", padding=10)
         nav_frame.pack(fill=tk.X, pady=(0, 10))
         
-        nav_buttons = ttk.Frame(nav_frame)
-        nav_buttons.pack(fill=tk.X)
+        # First row - Quick navigation buttons
+        quick_nav = ttk.Frame(nav_frame)
+        quick_nav.pack(fill=tk.X, pady=(0, 5))
         
-        self.prev_btn = ttk.Button(nav_buttons, text="◀", command=self.previous_page, width=5)
-        self.prev_btn.pack(side=tk.LEFT)
+        self.first_btn = ttk.Button(quick_nav, text="⏮", command=self.first_page, width=4)
+        self.first_btn.pack(side=tk.LEFT, padx=(0, 2))
         
-        self.page_label = ttk.Label(nav_buttons, text="No PDF loaded")
-        self.page_label.pack(side=tk.LEFT, expand=True)
+        self.prev_btn = ttk.Button(quick_nav, text="◀", command=self.previous_page, width=4)
+        self.prev_btn.pack(side=tk.LEFT, padx=(0, 5))
         
-        self.next_btn = ttk.Button(nav_buttons, text="▶", command=self.next_page, width=5)
-        self.next_btn.pack(side=tk.RIGHT)
+        self.next_btn = ttk.Button(quick_nav, text="▶", command=self.next_page, width=4)
+        self.next_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        self.last_btn = ttk.Button(quick_nav, text="⏭", command=self.last_page, width=4)
+        self.last_btn.pack(side=tk.RIGHT, padx=(2, 0))
+        
+        # Second row - Direct page input
+        page_input_frame = ttk.Frame(nav_frame)
+        page_input_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(page_input_frame, text="Page:").pack(side=tk.LEFT)
+        
+        # Page input with validation
+        self.page_var = tk.StringVar()
+        self.page_var.trace('w', self.on_page_input_change)
+        self.page_entry = ttk.Entry(page_input_frame, textvariable=self.page_var, width=8, justify=tk.CENTER)
+        self.page_entry.pack(side=tk.LEFT, padx=(5, 5))
+        
+        # Bind Enter key to go to page
+        self.page_entry.bind('<Return>', self.go_to_page_from_entry)
+        self.page_entry.bind('<FocusOut>', self.on_page_entry_focus_out)
+        
+        self.total_pages_label = ttk.Label(page_input_frame, text="of 0")
+        self.total_pages_label.pack(side=tk.LEFT)
+        
+        ttk.Button(page_input_frame, text="Go", command=self.go_to_page_from_entry, width=4).pack(side=tk.RIGHT)
+        
+        # Third row - Page status and thumbnails button
+        status_frame = ttk.Frame(nav_frame)
+        status_frame.pack(fill=tk.X)
+        
+        self.page_status_label = ttk.Label(status_frame, text="No PDF loaded", font=("Arial", 9))
+        self.page_status_label.pack(side=tk.LEFT)
+        
+        # Future: Add thumbnails view button
+        # ttk.Button(status_frame, text="Thumbnails", command=self.show_thumbnails).pack(side=tk.RIGHT)
         
         # Zoom frame
         zoom_frame = ttk.LabelFrame(self.left_panel, text="Zoom", padding=10)
@@ -205,6 +240,11 @@ class PDFViewerApp:
         self.root.bind("<Control-w>", lambda e: self.fit_to_width())
         self.root.bind("<Left>", lambda e: self.previous_page())
         self.root.bind("<Right>", lambda e: self.next_page())
+        self.root.bind("<Home>", lambda e: self.first_page())
+        self.root.bind("<End>", lambda e: self.last_page())
+        self.root.bind("<Control-g>", lambda e: self.focus_page_entry())
+        self.root.bind("<Page_Up>", lambda e: self.previous_page())
+        self.root.bind("<Page_Down>", lambda e: self.next_page())
         
         # Enable drag and drop (simplified for cross-platform compatibility)
         # Note: Advanced drag-drop functionality would require tkinterdnd2
@@ -345,16 +385,33 @@ class PDFViewerApp:
     def update_navigation(self):
         """Update navigation controls"""
         if not self.pdf_document:
-            self.page_label.config(text="No PDF loaded")
+            self.page_status_label.config(text="No PDF loaded")
+            self.total_pages_label.config(text="of 0")
+            self.first_btn.config(state=tk.DISABLED)
             self.prev_btn.config(state=tk.DISABLED)
             self.next_btn.config(state=tk.DISABLED)
+            self.last_btn.config(state=tk.DISABLED)
+            self.page_entry.config(state=tk.DISABLED)
+            self.page_var.set("")
             return
             
         total_pages = len(self.pdf_document)
-        self.page_label.config(text=f"Page {self.current_page + 1} of {total_pages}")
+        current_display = self.current_page + 1
         
+        # Update page display
+        self.page_status_label.config(text=f"Page {current_display} of {total_pages}")
+        self.total_pages_label.config(text=f"of {total_pages}")
+        
+        # Update page entry if not currently being edited
+        if self.page_entry != self.root.focus_get():
+            self.page_var.set(str(current_display))
+        
+        # Enable/disable navigation buttons
+        self.page_entry.config(state=tk.NORMAL)
+        self.first_btn.config(state=tk.NORMAL if self.current_page > 0 else tk.DISABLED)
         self.prev_btn.config(state=tk.NORMAL if self.current_page > 0 else tk.DISABLED)
         self.next_btn.config(state=tk.NORMAL if self.current_page < total_pages - 1 else tk.DISABLED)
+        self.last_btn.config(state=tk.NORMAL if self.current_page < total_pages - 1 else tk.DISABLED)
         
         # Update zoom label
         self.zoom_label.config(text=f"{int(self.zoom_level * 100)}%")
@@ -372,6 +429,115 @@ class PDFViewerApp:
             self.current_page += 1
             self.render_current_page()
             self.update_navigation()
+            
+    def first_page(self):
+        """Go to first page"""
+        if self.pdf_document and self.current_page > 0:
+            self.current_page = 0
+            self.render_current_page()
+            self.update_navigation()
+            
+    def last_page(self):
+        """Go to last page"""
+        if self.pdf_document:
+            last_page = len(self.pdf_document) - 1
+            if self.current_page != last_page:
+                self.current_page = last_page
+                self.render_current_page()
+                self.update_navigation()
+                
+    def go_to_page(self, page_number):
+        """Go to specific page (1-based)"""
+        if not self.pdf_document:
+            return False
+            
+        # Convert to 0-based index
+        page_index = page_number - 1
+        total_pages = len(self.pdf_document)
+        
+        if 0 <= page_index < total_pages:
+            self.current_page = page_index
+            self.render_current_page()
+            self.update_navigation()
+            return True
+        return False
+        
+    def go_to_page_from_entry(self, event=None):
+        """Handle page navigation from entry widget"""
+        try:
+            page_text = self.page_var.get().strip()
+            if not page_text:
+                return
+                
+            page_number = int(page_text)
+            if self.go_to_page(page_number):
+                # Clear focus from entry
+                self.root.focus()
+            else:
+                # Invalid page number - show error and reset
+                total_pages = len(self.pdf_document) if self.pdf_document else 0
+                messagebox.showerror("Invalid Page", 
+                                   f"Please enter a page number between 1 and {total_pages}")
+                # Reset to current page
+                self.page_var.set(str(self.current_page + 1))
+                
+        except ValueError:
+            # Invalid input - reset to current page
+            if self.pdf_document:
+                self.page_var.set(str(self.current_page + 1))
+            else:
+                self.page_var.set("")
+                
+    def on_page_input_change(self, *args):
+        """Handle real-time validation of page input"""
+        if not self.pdf_document:
+            return
+            
+        try:
+            page_text = self.page_var.get().strip()
+            if not page_text:
+                return
+                
+            page_number = int(page_text)
+            total_pages = len(self.pdf_document)
+            
+            # Visual feedback for valid/invalid page numbers
+            if 1 <= page_number <= total_pages:
+                self.page_entry.config(foreground="black")
+            else:
+                self.page_entry.config(foreground="red")
+                
+        except ValueError:
+            # Invalid input - show red text
+            self.page_entry.config(foreground="red")
+            
+    def on_page_entry_focus_out(self, event=None):
+        """Handle when page entry loses focus"""
+        if self.pdf_document:
+            # Reset to current page if invalid input
+            try:
+                page_text = self.page_var.get().strip()
+                if not page_text:
+                    self.page_var.set(str(self.current_page + 1))
+                    return
+                    
+                page_number = int(page_text)
+                total_pages = len(self.pdf_document)
+                
+                if not (1 <= page_number <= total_pages):
+                    self.page_var.set(str(self.current_page + 1))
+                    
+            except ValueError:
+                self.page_var.set(str(self.current_page + 1))
+                
+        # Reset text color
+        self.page_entry.config(foreground="black")
+        
+    def focus_page_entry(self):
+        """Focus on page entry for direct navigation"""
+        if self.pdf_document:
+            self.page_entry.focus()
+            self.page_entry.select_range(0, tk.END)
             
     def zoom_in(self):
         """Zoom in"""

@@ -17,7 +17,7 @@ The application uses a **desktop GUI architecture** built with Python's Tkinter 
 - **Reusable UI Components** (`ui_components.py`): Modular widgets for crop management, naming patterns, and controls
 - **Component Separation**: Each UI component is encapsulated in its own class for maintainability and reusability
 
-The UI layout uses a **two-panel design** with a left control panel for settings and crop management, and a right panel for PDF display and interaction.
+The UI layout uses a **two-panel design** with a left control panel for settings and crop management, and a right panel for PDF display and interaction. The navigation system provides comprehensive page control including direct page input, first/last page buttons, and real-time input validation.
 
 ### PDF Processing Architecture
 The application employs a **document processing pipeline** using PyMuPDF (fitz) as the core PDF engine:
