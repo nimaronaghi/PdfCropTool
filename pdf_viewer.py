@@ -533,6 +533,10 @@ class PDFViewerApp:
             # Redraw existing crop rectangles
             self.redraw_crop_rectangles()
             
+            # Update visualization highlighting for current page
+            if hasattr(self, 'viz_highlight_var') and self.viz_highlight_var.get():
+                self.highlight_visualization_keywords()
+            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to render page: {str(e)}")
     
@@ -601,6 +605,10 @@ class PDFViewerApp:
             
             # Redraw crop rectangles
             self.redraw_crop_rectangles()
+            
+            # Update visualization highlighting for continuous mode
+            if hasattr(self, 'viz_highlight_var') and self.viz_highlight_var.get():
+                self.highlight_visualization_keywords()
             
             # Store current page DPI for extraction
             self.page_dpi = 72 * 2
@@ -754,21 +762,24 @@ class PDFViewerApp:
         """Go to previous page"""
         if self.pdf_document and self.current_page > 0:
             self.current_page -= 1
-            self.render_current_page()
+            if not self.continuous_mode:
+                self.render_current_page()
             self.update_navigation()
             
     def next_page(self):
         """Go to next page"""
         if self.pdf_document and self.current_page < len(self.pdf_document) - 1:
             self.current_page += 1
-            self.render_current_page()
+            if not self.continuous_mode:
+                self.render_current_page()
             self.update_navigation()
             
     def first_page(self):
         """Go to first page"""
         if self.pdf_document and self.current_page > 0:
             self.current_page = 0
-            self.render_current_page()
+            if not self.continuous_mode:
+                self.render_current_page()
             self.update_navigation()
             
     def last_page(self):
@@ -777,7 +788,8 @@ class PDFViewerApp:
             last_page = len(self.pdf_document) - 1
             if self.current_page != last_page:
                 self.current_page = last_page
-                self.render_current_page()
+                if not self.continuous_mode:
+                    self.render_current_page()
                 self.update_navigation()
                 
     def go_to_page(self, page_number):
@@ -791,7 +803,8 @@ class PDFViewerApp:
         
         if 0 <= page_index < total_pages:
             self.current_page = page_index
-            self.render_current_page()
+            if not self.continuous_mode:
+                self.render_current_page()
             self.update_navigation()
             return True
         return False
