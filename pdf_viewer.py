@@ -1052,7 +1052,8 @@ class PDFViewerApp:
         
         def load_url():
             result_url = url_var.get().strip()
-            result['url'] = result_url
+            if result_url:
+                result['url'] = result_url
             dialog.destroy()
             
         def cancel():
