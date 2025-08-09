@@ -55,7 +55,7 @@ class CropFrame(ttk.LabelFrame):
         self.crop_listbox.bind('<<ListboxSelect>>', self.on_selection_change)
         
     def update_crop_list(self, crop_selections):
-        """Update the crop list display"""
+        """Update the crop list display with quality information"""
         self.crop_listbox.delete(0, tk.END)
         
         for i, crop in enumerate(crop_selections):
@@ -64,7 +64,26 @@ class CropFrame(ttk.LabelFrame):
             width = int(coords[2] - coords[0])
             height = int(coords[3] - coords[1])
             
-            item_text = f"#{i+1}: Page {page_num} ({width}×{height})"
+            # Get quality preview if PDF document available
+            quality_info = ""
+            if hasattr(self.app, 'pdf_document') and self.app.pdf_document:
+                try:
+                    from image_extractor import ImageExtractor
+                    extractor = ImageExtractor(self.app.pdf_document)
+                    preview_info = extractor.get_crop_preview_info(crop)
+                    if preview_info:
+                        dpi = preview_info['estimated_dpi']
+                        # Short quality indicator
+                        if dpi >= 300:
+                            quality_info = f" [{dpi} DPI ✓]"
+                        elif dpi >= 200:
+                            quality_info = f" [{dpi} DPI ~]"
+                        else:
+                            quality_info = f" [{dpi} DPI !]"
+                except Exception:
+                    pass
+            
+            item_text = f"#{i+1}: Page {page_num} ({width}×{height}){quality_info}"
             self.crop_listbox.insert(tk.END, item_text)
             
         # Update button states
@@ -108,7 +127,43 @@ class CropFrame(ttk.LabelFrame):
         if selection:
             crop_index = selection[0]
             if crop_index < len(self.app.crop_selections):
+                # Show quality preview before saving
+                self.show_crop_quality_preview(crop_index)
+                
+    def show_crop_quality_preview(self, crop_index):
+        """Show detailed quality information before saving"""
+        if crop_index >= len(self.app.crop_selections):
+            return
+            
+        crop = self.app.crop_selections[crop_index]
+        
+        try:
+            from image_extractor import ImageExtractor
+            import tkinter.messagebox as messagebox
+            
+            extractor = ImageExtractor(self.app.pdf_document)
+            preview_info = extractor.get_crop_preview_info(crop)
+            
+            if preview_info:
+                details = (f"Quality Preview for Crop #{crop_index + 1}\n\n"
+                          f"Resolution: {preview_info['estimated_dpi']} DPI\n"
+                          f"Output Size: {preview_info['output_width']}×{preview_info['output_height']} pixels\n"
+                          f"Physical Size: {preview_info['width_inches']}×{preview_info['height_inches']} inches\n"
+                          f"Quality Rating: {preview_info['quality_rating']}\n"
+                          f"Estimated File Size: {preview_info['file_size_estimate']} MB\n\n"
+                          f"Proceed with saving?")
+                
+                result = messagebox.askyesno("Quality Preview", details)
+                if result:
+                    self.app.save_individual_crop(crop_index)
+            else:
+                # Fallback to direct save if preview fails
                 self.app.save_individual_crop(crop_index)
+                
+        except Exception as e:
+            print(f"Error showing quality preview: {e}")
+            # Fallback to direct save
+            self.app.save_individual_crop(crop_index)
 
 class NamingFrame(ttk.LabelFrame):
     """Frame for configuring file naming patterns"""

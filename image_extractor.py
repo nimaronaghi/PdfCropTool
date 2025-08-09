@@ -11,15 +11,17 @@ from pathlib import Path
 class ImageExtractor:
     """Class for extracting high-quality images from PDF documents"""
     
-    def __init__(self, pdf_document):
+    def __init__(self, pdf_document, target_dpi=300):
         """
         Initialize the image extractor
         
         Args:
             pdf_document: PyMuPDF document object
+            target_dpi: Target DPI for extraction (default: 300)
         """
         self.pdf_document = pdf_document
-        self.max_dpi = 300  # Maximum DPI for extraction
+        self.target_dpi = target_dpi
+        self.min_dpi = 150  # Minimum acceptable DPI
         
     def extract_crop(self, crop_data, output_path):
         """
@@ -40,49 +42,142 @@ class ImageExtractor:
             # Get the PDF page
             page = self.pdf_document[page_num]
             
-            # Calculate extraction parameters for maximum quality
-            # We want to extract at native resolution or higher
-            extraction_scale = max(2.0, 300 / 72)  # At least 300 DPI
+            # Calculate extraction parameters for target quality
+            page_rect = page.rect
             
-            # Create transformation matrix for high-resolution rendering
-            matrix = fitz.Matrix(extraction_scale, extraction_scale)
+            # Calculate optimal extraction scale based on target DPI
+            extraction_scale = max(self.target_dpi / 72, 2.0)  # Ensure minimum 2x scale
+            
+            # Get actual output dimensions for verification
+            crop_width = coords[2] - coords[0]  # in display pixels
+            crop_height = coords[3] - coords[1]  # in display pixels
             
             # Convert display coordinates to PDF coordinates
-            # Display coordinates are based on zoom level
-            scale_factor = extraction_scale / (display_zoom * 2)  # 2x was used for initial rendering
+            # Display coordinates are based on zoom level and 2x rendering scale
+            pdf_scale_factor = extraction_scale / (display_zoom * 2)
             
-            pdf_left = coords[0] * scale_factor
-            pdf_top = coords[1] * scale_factor
-            pdf_right = coords[2] * scale_factor
-            pdf_bottom = coords[3] * scale_factor
+            pdf_left = coords[0] * pdf_scale_factor
+            pdf_top = coords[1] * pdf_scale_factor
+            pdf_right = coords[2] * pdf_scale_factor
+            pdf_bottom = coords[3] * pdf_scale_factor
             
             # Create clip rectangle in PDF coordinates
             clip_rect = fitz.Rect(pdf_left, pdf_top, pdf_right, pdf_bottom)
             
-            # Render the page with clipping
+            # Create transformation matrix for high-resolution rendering
+            matrix = fitz.Matrix(extraction_scale, extraction_scale)
+            
+            # Render the page with clipping at target resolution
             pix = page.get_pixmap(matrix=matrix, clip=clip_rect)
             
             # Convert to PIL Image
             img_data = pix.tobytes("ppm")
             pil_image = Image.open(io.BytesIO(img_data))
             
-            # Set DPI metadata
-            dpi = int(72 * extraction_scale)
+            # Calculate actual DPI achieved
+            actual_dpi = int(72 * extraction_scale)
             
-            # Save as PNG with maximum quality and DPI metadata
+            # Calculate physical dimensions at this DPI
+            width_inches = pil_image.width / actual_dpi
+            height_inches = pil_image.height / actual_dpi
+            
+            # Add extraction metadata to image
+            metadata = {
+                'extraction_dpi': actual_dpi,
+                'target_dpi': self.target_dpi,
+                'width_pixels': pil_image.width,
+                'height_pixels': pil_image.height,
+                'width_inches': round(width_inches, 3),
+                'height_inches': round(height_inches, 3),
+                'page_number': page_num + 1,
+                'extraction_scale': round(extraction_scale, 2)
+            }
+            
+            # Save as PNG with maximum quality and comprehensive metadata
             pil_image.save(
                 output_path,
                 "PNG",
-                dpi=(dpi, dpi),
+                dpi=(actual_dpi, actual_dpi),
                 optimize=False,  # Don't optimize to preserve quality
                 compress_level=0  # No compression for maximum quality
             )
             
-            return True
+            return metadata
             
         except Exception as e:
             print(f"Error extracting crop: {str(e)}")
-            return False
+            return None
+            
+    def get_crop_preview_info(self, crop_data):
+        """
+        Get preview information about a crop before extraction
+        
+        Args:
+            crop_data: Dictionary containing page, coords, and zoom info
+            
+        Returns:
+            dict: Preview information including estimated dimensions and DPI
+        """
+        try:
+            page_num = crop_data['page']
+            coords = crop_data['coords']
+            display_zoom = crop_data['zoom']
+            
+            page = self.pdf_document[page_num]
+            
+            # Calculate what the extraction parameters would be
+            extraction_scale = max(self.target_dpi / 72, 2.0)
+            pdf_scale_factor = extraction_scale / (display_zoom * 2)
+            
+            # Calculate PDF coordinates
+            pdf_width = (coords[2] - coords[0]) * pdf_scale_factor
+            pdf_height = (coords[3] - coords[1]) * pdf_scale_factor
+            
+            # Calculate final output dimensions
+            output_width = int(pdf_width * extraction_scale)
+            output_height = int(pdf_height * extraction_scale)
+            
+            # Calculate actual DPI
+            actual_dpi = int(72 * extraction_scale)
+            
+            # Calculate physical dimensions
+            width_inches = output_width / actual_dpi
+            height_inches = output_height / actual_dpi
+            
+            return {
+                'estimated_dpi': actual_dpi,
+                'target_dpi': self.target_dpi,
+                'output_width': output_width,
+                'output_height': output_height,
+                'width_inches': round(width_inches, 3),
+                'height_inches': round(height_inches, 3),
+                'file_size_estimate': self._estimate_file_size(output_width, output_height),
+                'quality_rating': self._get_quality_rating(actual_dpi)
+            }
+            
+        except Exception as e:
+            print(f"Error getting crop preview: {str(e)}")
+            return None
+            
+    def _estimate_file_size(self, width, height):
+        """Estimate PNG file size in MB"""
+        # Rough estimation: PNG typically uses 3-4 bytes per pixel for RGB
+        bytes_estimate = width * height * 3.5
+        mb_estimate = bytes_estimate / (1024 * 1024)
+        return round(mb_estimate, 2)
+        
+    def _get_quality_rating(self, dpi):
+        """Get quality rating based on DPI"""
+        if dpi >= 600:
+            return "Excellent (Print Ready)"
+        elif dpi >= 300:
+            return "Very Good (Print Quality)"
+        elif dpi >= 200:
+            return "Good (Web/Screen)"
+        elif dpi >= 150:
+            return "Fair (Low Print)"
+        else:
+            return "Poor (Screen Only)"
             
     def get_page_info(self, page_num):
         """
@@ -171,8 +266,8 @@ class ImageExtractor:
         crop_width_inches = crop_width / 72  # Convert points to inches
         optimal_dpi = target_width / crop_width_inches
         
-        # Cap at reasonable maximum
-        return min(int(optimal_dpi), self.max_dpi)
+        # Cap at reasonable maximum (600 DPI)
+        return min(int(optimal_dpi), 600)
         
     def preview_crop(self, crop_data, max_size=(300, 300)):
         """

@@ -720,8 +720,8 @@ class PDFViewerApp:
                 output_path = os.path.join(self.output_directory, filename)
                 
                 # Extract and save crop
-                success = extractor.extract_crop(crop, output_path)
-                if success:
+                metadata = extractor.extract_crop(crop, output_path)
+                if metadata:
                     exported_count += 1
                     
             # Update UI in main thread
@@ -810,27 +810,47 @@ class PDFViewerApp:
         """Save individual crop in background thread"""
         try:
             extractor = ImageExtractor(self.pdf_document)
-            success = extractor.extract_crop(crop, file_path)
+            metadata = extractor.extract_crop(crop, file_path)
             
             # Update UI in main thread
-            self.root.after(0, self._individual_save_complete_callback, success, file_path, crop_number)
+            self.root.after(0, self._individual_save_complete_callback, metadata, file_path, crop_number)
             
         except Exception as e:
             self.root.after(0, self._individual_save_error_callback, str(e), crop_number)
             
-    def _individual_save_complete_callback(self, success, file_path, crop_number):
+    def _individual_save_complete_callback(self, metadata, file_path, crop_number):
         """Callback when individual crop save is complete"""
         self.progress_bar.stop()
         self.progress_bar.pack_forget()
         self.status_label.config(text="Ready")
         
-        if success:
+        if metadata:
             filename = os.path.basename(file_path)
-            messagebox.showinfo("Save Complete", 
-                              f"Crop #{crop_number} saved successfully as:\n{filename}")
+            # Show detailed save information
+            details = (f"Crop #{crop_number} saved successfully!\n\n"
+                      f"File: {filename}\n"
+                      f"Resolution: {metadata['extraction_dpi']} DPI\n"
+                      f"Dimensions: {metadata['width_pixels']}×{metadata['height_pixels']} pixels\n"
+                      f"Physical Size: {metadata['width_inches']}×{metadata['height_inches']} inches\n"
+                      f"Quality: {self._get_quality_rating(metadata['extraction_dpi'])}")
+            
+            messagebox.showinfo("Save Complete", details)
         else:
             messagebox.showerror("Save Failed", 
                                f"Failed to save crop #{crop_number}")
+                               
+    def _get_quality_rating(self, dpi):
+        """Get quality rating based on DPI"""
+        if dpi >= 600:
+            return "Excellent (Print Ready)"
+        elif dpi >= 300:
+            return "Very Good (Print Quality)"
+        elif dpi >= 200:
+            return "Good (Web/Screen)"
+        elif dpi >= 150:
+            return "Fair (Low Print)"
+        else:
+            return "Poor (Screen Only)"
             
     def _individual_save_error_callback(self, error_msg, crop_number):
         """Callback when individual crop save fails"""
