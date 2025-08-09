@@ -595,3 +595,81 @@ class PDFViewerApp:
             self.crop_selections.pop(index)
             self.crop_frame.update_crop_list(self.crop_selections)
             self.redraw_crop_rectangles()
+            
+    def save_individual_crop(self, crop_index):
+        """Save an individual crop with custom filename and location"""
+        if crop_index >= len(self.crop_selections):
+            return
+            
+        crop = self.crop_selections[crop_index]
+        
+        # Generate default filename based on crop number and page
+        page_num = crop['page'] + 1
+        default_filename = f"crop_{crop_index + 1:03d}_page_{page_num:03d}.png"
+        
+        # Let user choose save location and filename
+        file_path = filedialog.asksaveasfilename(
+            title="Save Crop As...",
+            defaultextension=".png",
+            initialfile=default_filename,
+            filetypes=[
+                ("PNG files", "*.png"),
+                ("JPEG files", "*.jpg"),
+                ("All files", "*.*")
+            ]
+        )
+        
+        if not file_path:
+            return  # User cancelled
+            
+        try:
+            self.status_label.config(text="Saving crop...")
+            self.progress_bar.pack(side=tk.RIGHT, padx=(10, 0))
+            self.progress_bar.start()
+            
+            # Save in background thread
+            threading.Thread(
+                target=self._save_individual_crop_thread,
+                args=(crop, file_path, crop_index + 1),
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            self.progress_bar.stop()
+            self.progress_bar.pack_forget()
+            self.status_label.config(text="Ready")
+            messagebox.showerror("Save Error", f"Failed to save crop: {str(e)}")
+            
+    def _save_individual_crop_thread(self, crop, file_path, crop_number):
+        """Save individual crop in background thread"""
+        try:
+            extractor = ImageExtractor(self.pdf_document)
+            success = extractor.extract_crop(crop, file_path)
+            
+            # Update UI in main thread
+            self.root.after(0, self._individual_save_complete_callback, success, file_path, crop_number)
+            
+        except Exception as e:
+            self.root.after(0, self._individual_save_error_callback, str(e), crop_number)
+            
+    def _individual_save_complete_callback(self, success, file_path, crop_number):
+        """Callback when individual crop save is complete"""
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.status_label.config(text="Ready")
+        
+        if success:
+            filename = os.path.basename(file_path)
+            messagebox.showinfo("Save Complete", 
+                              f"Crop #{crop_number} saved successfully as:\n{filename}")
+        else:
+            messagebox.showerror("Save Failed", 
+                               f"Failed to save crop #{crop_number}")
+            
+    def _individual_save_error_callback(self, error_msg, crop_number):
+        """Callback when individual crop save fails"""
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.status_label.config(text="Ready")
+        messagebox.showerror("Save Error", 
+                           f"Failed to save crop #{crop_number}: {error_msg}")

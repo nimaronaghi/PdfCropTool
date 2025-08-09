@@ -32,12 +32,24 @@ class CropFrame(ttk.LabelFrame):
         button_frame = ttk.Frame(self)
         button_frame.pack(fill=tk.X, pady=(10, 0))
         
-        self.remove_btn = ttk.Button(button_frame, text="Remove Selected", 
+        # First row of buttons
+        top_button_frame = ttk.Frame(button_frame)
+        top_button_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        self.remove_btn = ttk.Button(top_button_frame, text="Remove Selected", 
                                     command=self.remove_selected_crop, state=tk.DISABLED)
         self.remove_btn.pack(side=tk.LEFT, padx=(0, 5))
         
-        ttk.Button(button_frame, text="Clear All", 
+        ttk.Button(top_button_frame, text="Clear All", 
                   command=self.clear_all_crops).pack(side=tk.RIGHT)
+        
+        # Second row of buttons
+        bottom_button_frame = ttk.Frame(button_frame)
+        bottom_button_frame.pack(fill=tk.X)
+        
+        self.save_individual_btn = ttk.Button(bottom_button_frame, text="Save Individual", 
+                                            command=self.save_selected_crop, state=tk.DISABLED)
+        self.save_individual_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         # Bind selection events
         self.crop_listbox.bind('<<ListboxSelect>>', self.on_selection_change)
@@ -57,12 +69,14 @@ class CropFrame(ttk.LabelFrame):
             
         # Update button states
         self.remove_btn.config(state=tk.DISABLED)
+        self.save_individual_btn.config(state=tk.DISABLED)
         
     def on_selection_change(self, event):
         """Handle crop selection changes"""
         selection = self.crop_listbox.curselection()
         if selection:
             self.remove_btn.config(state=tk.NORMAL)
+            self.save_individual_btn.config(state=tk.NORMAL)
             
             # Navigate to the page containing the selected crop
             crop_index = selection[0]
@@ -74,6 +88,7 @@ class CropFrame(ttk.LabelFrame):
                     self.app.update_navigation()
         else:
             self.remove_btn.config(state=tk.DISABLED)
+            self.save_individual_btn.config(state=tk.DISABLED)
             
     def remove_selected_crop(self):
         """Remove the currently selected crop"""
@@ -86,6 +101,14 @@ class CropFrame(ttk.LabelFrame):
     def clear_all_crops(self):
         """Clear all crop selections"""
         self.app.clear_all_crops()
+        
+    def save_selected_crop(self):
+        """Save the currently selected individual crop"""
+        selection = self.crop_listbox.curselection()
+        if selection:
+            crop_index = selection[0]
+            if crop_index < len(self.app.crop_selections):
+                self.app.save_individual_crop(crop_index)
 
 class NamingFrame(ttk.LabelFrame):
     """Frame for configuring file naming patterns"""

@@ -33,6 +33,7 @@ The image extraction follows a **quality-first approach**:
 - **Adaptive Scaling**: Automatically calculates optimal extraction resolution based on source content
 - **Native Resolution Preservation**: Extracts at PDF native resolution or higher to maintain quality
 - **PIL Integration**: Uses Pillow (PIL) for final image processing and format conversion
+- **Dual Save Options**: Both batch export to specified directory and individual crop saving with custom filenames/locations
 
 ### State Management
 The application uses a **centralized state management** pattern:
