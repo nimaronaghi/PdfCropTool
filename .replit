@@ -18,25 +18,13 @@ author = "agent"
 task = "workflow.run"
 args = "PDF Figure Extractor"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "desktop_app"
-
 [[workflows.workflow]]
 name = "PDF Figure Extractor"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pip install PyMuPDF pillow && python main.py"
-
 [workflows.workflow.metadata]
 outputType = "vnc"
 
-[[workflows.workflow]]
-name = "desktop_app"
-author = "agent"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pip install PyMuPDF pillow tkinter && python main.py"
+args = "python main.py"
