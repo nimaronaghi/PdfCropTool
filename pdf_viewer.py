@@ -172,7 +172,6 @@ class PDFViewerApp:
         ttk.Button(file_frame, text="Open PDF", command=self.open_pdf).pack(fill=tk.X, pady=2)
         ttk.Button(file_frame, text="Load from URL", command=self.load_pdf_from_url).pack(fill=tk.X, pady=2)
         ttk.Button(file_frame, text="Select Output Folder", command=self.select_output_directory).pack(fill=tk.X, pady=2)
-        ttk.Button(file_frame, text="Upload to Drive", command=self.upload_to_drive).pack(fill=tk.X, pady=2)
         
         # PDF info frame
         self.info_frame = ttk.LabelFrame(self.left_panel, text="PDF Information", padding=10)
