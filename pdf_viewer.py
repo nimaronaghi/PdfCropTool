@@ -447,7 +447,7 @@ class PDFViewerApp:
             matrix = fitz.Matrix(self.zoom_level * 2, self.zoom_level * 2)  # 2x for high DPI
             
             # Render page to pixmap
-            pix = page.get_pixmap(matrix=matrix)
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
             
             # Convert to PIL Image
             img_data = pix.tobytes("ppm")
@@ -1051,7 +1051,8 @@ class PDFViewerApp:
         result = {'url': None}
         
         def load_url():
-            result['url'] = url_var.get().strip()
+            result_url = url_var.get().strip()
+            result['url'] = result_url
             dialog.destroy()
             
         def cancel():
@@ -1177,7 +1178,7 @@ class PDFViewerApp:
             
             info = f"Source: URL\n"
             info += f"URL: {url[:50]}{'...' if len(url) > 50 else ''}\n"
-            info += f"Pages: {len(self.pdf_document)}\n"
+            info += f"Pages: {self.pdf_document.page_count if self.pdf_document else 0}\n"
             info += f"Size: {size_mb:.1f} MB\n"
             
             # Get PDF metadata if available
