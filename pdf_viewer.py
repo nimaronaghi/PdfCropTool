@@ -7,6 +7,7 @@ from tkinter import ttk, filedialog, messagebox
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import os
+import io
 import threading
 from pathlib import Path
 
@@ -205,14 +206,14 @@ class PDFViewerApp:
         self.root.bind("<Left>", lambda e: self.previous_page())
         self.root.bind("<Right>", lambda e: self.next_page())
         
-        # Enable drag and drop
-        self.root.drop_target_register(tk.DND_FILES)
-        self.root.dnd_bind('<<Drop>>', self.on_drop)
+        # Enable drag and drop (simplified for cross-platform compatibility)
+        # Note: Advanced drag-drop functionality would require tkinterdnd2
+        # For now, we'll rely on file menu only
         
     def show_welcome_message(self):
         """Show welcome message when no PDF is loaded"""
         self.canvas.delete("all")
-        welcome_text = "Drag and drop a PDF file here\nor use File → Open PDF"
+        welcome_text = "Use File → Open PDF to load a document"
         self.canvas.create_text(
             300, 200, text=welcome_text, 
             font=("Arial", 16), fill="gray", 
@@ -229,16 +230,6 @@ class PDFViewerApp:
         if file_path:
             self.load_pdf(file_path)
             
-    def on_drop(self, event):
-        """Handle drag and drop of PDF files"""
-        files = self.root.tk.splitlist(event.data)
-        if files:
-            file_path = files[0]
-            if file_path.lower().endswith('.pdf'):
-                self.load_pdf(file_path)
-            else:
-                messagebox.showerror("Error", "Please select a PDF file")
-                
     def load_pdf(self, file_path):
         """Load a PDF document"""
         try:
@@ -324,7 +315,7 @@ class PDFViewerApp:
             
             # Convert to PIL Image
             img_data = pix.tobytes("ppm")
-            pil_image = Image.open(tk.io.BytesIO(img_data))
+            pil_image = Image.open(io.BytesIO(img_data))
             
             # Resize for display (while keeping original for extraction)
             display_width = int(pil_image.width * self.zoom_level)

@@ -5,6 +5,7 @@ Image Extractor - High-DPI image extraction from PDF documents
 import fitz  # PyMuPDF
 from PIL import Image
 import os
+import io
 from pathlib import Path
 
 class ImageExtractor:

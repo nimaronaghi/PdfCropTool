@@ -3,6 +3,7 @@ Utility Functions - Helper functions for the PDF viewer application
 """
 
 import os
+import tkinter as tk
 from pathlib import Path
 import fitz  # PyMuPDF
 from datetime import datetime
