@@ -92,6 +92,7 @@ class PDFViewerApp:
         file_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Button(file_frame, text="Open PDF", command=self.open_pdf).pack(fill=tk.X, pady=2)
+        ttk.Button(file_frame, text="Select Output Folder", command=self.select_output_directory).pack(fill=tk.X, pady=2)
         
         # PDF info frame
         self.info_frame = ttk.LabelFrame(self.left_panel, text="PDF Information", padding=10)
@@ -172,6 +173,15 @@ class PDFViewerApp:
         # Naming frame
         self.naming_frame = NamingFrame(self.left_panel, self)
         self.naming_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Output directory frame
+        output_frame = ttk.LabelFrame(self.left_panel, text="Export Settings", padding=10)
+        output_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.output_label = ttk.Label(output_frame, text="No output folder selected", foreground="gray")
+        self.output_label.pack(fill=tk.X, pady=2)
+        
+        ttk.Button(output_frame, text="Export All Crops", command=self.export_all_crops).pack(fill=tk.X, pady=2)
         
         # Export frame
         export_frame = ttk.LabelFrame(self.left_panel, text="Export", padding=10)
@@ -683,8 +693,10 @@ class PDFViewerApp:
             return
             
         if not self.output_directory:
-            messagebox.showwarning("No Directory", "Please select an output directory first")
-            return
+            # Automatically prompt for output directory
+            self.select_output_directory()
+            if not self.output_directory:
+                return
             
         try:
             extractor = ImageExtractor(self.pdf_document)

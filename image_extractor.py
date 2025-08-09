@@ -46,8 +46,9 @@ class ImageExtractor:
             # First, check if the page has embedded images to determine native resolution
             native_scale = self._get_page_native_scale(page)
             
-            # Use the maximum scale between native content and a reasonable minimum
-            extraction_scale = max(native_scale, 4.0)  # At least 4x scale (288 DPI minimum)
+            # Use reasonable scale based on native content but cap for file size
+            # For most figures, 300-600 DPI is more than sufficient
+            extraction_scale = max(min(native_scale, 8.0), 4.0)  # Between 4x-8x scale (288-576 DPI)
             
             # Get actual output dimensions for verification
             crop_width = coords[2] - coords[0]  # in display pixels
@@ -95,14 +96,29 @@ class ImageExtractor:
                 'source_quality': 'Maximum Available from PDF'
             }
             
-            # Save as PNG with maximum quality and comprehensive metadata
-            pil_image.save(
-                output_path,
-                "PNG",
-                dpi=(actual_dpi, actual_dpi),
-                optimize=False,  # Don't optimize to preserve quality
-                compress_level=0  # No compression for maximum quality
-            )
+            # Determine output format based on content and size
+            file_size_mb = (pil_image.width * pil_image.height * 3) / (1024 * 1024)
+            
+            if file_size_mb > 50:  # If estimated size > 50MB, use JPEG with high quality
+                if not output_path.lower().endswith('.jpg') and not output_path.lower().endswith('.jpeg'):
+                    output_path = output_path.rsplit('.', 1)[0] + '.jpg'
+                
+                pil_image.save(
+                    output_path,
+                    "JPEG",
+                    dpi=(actual_dpi, actual_dpi),
+                    quality=95,  # High quality JPEG
+                    optimize=True
+                )
+            else:
+                # Use PNG for smaller files to preserve quality
+                pil_image.save(
+                    output_path,
+                    "PNG",
+                    dpi=(actual_dpi, actual_dpi),
+                    optimize=True,  # PNG optimization without quality loss
+                    compress_level=6  # Moderate compression for reasonable file size
+                )
             
             return metadata
             
@@ -159,11 +175,11 @@ class ImageExtractor:
             has_text = len(text_objects.get("blocks", [])) > 0
             
             if has_text:
-                # For pages with text, we can safely scale to very high resolutions
-                max_scale = max(max_scale, 8.0)  # Up to 576 DPI for text
+                # For pages with text, use moderate scaling for readability
+                max_scale = max(max_scale, 6.0)  # Up to 432 DPI for text
             
             # Cap at reasonable maximum to avoid huge files
-            return min(max_scale, 12.0)  # Max 864 DPI
+            return min(max_scale, 8.0)  # Max 576 DPI for reasonable file sizes
             
         except Exception as e:
             print(f"Error determining native scale: {e}")
