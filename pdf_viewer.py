@@ -1622,10 +1622,12 @@ class PDFViewerApp:
         if pattern:
             self.learned_naming_prefix = pattern['prefix']
             self.learned_naming_pattern = pattern['full_pattern']
-            print(f"Learned naming pattern: {self.learned_naming_pattern}")
+            print(f"DEBUG: Learned naming pattern: '{self.learned_naming_pattern}' from '{old_name}' -> '{new_name}'")
             
             # Update subsequent crops that haven't been manually renamed
             self._update_subsequent_crop_names(crop_index)
+        else:
+            print(f"DEBUG: Could not extract pattern from '{old_name}' -> '{new_name}'")
     
     def _extract_naming_pattern(self, crop_index, old_name, new_name):
         """Extract naming pattern from user rename"""
@@ -1636,6 +1638,13 @@ class PDFViewerApp:
         new_numbers = re.findall(r'\d+', new_name)
         
         if not old_numbers or not new_numbers:
+            # If no numbers, just use the new name as a prefix pattern
+            if new_name:
+                return {
+                    'prefix': new_name + "_Q",
+                    'suffix': "",
+                    'full_pattern': new_name + "_Q{:04d}"
+                }
             return None
         
         # Find the number that represents the crop sequence
@@ -1647,11 +1656,18 @@ class PDFViewerApp:
             old_last_num = int(old_numbers[-1])
             new_last_num = int(new_numbers[-1])
             
-            # If the difference matches the crop index difference, this is likely the sequence
+            # More flexible matching - check if either number matches expected crop number
             expected_old = crop_index + 1
-            if old_last_num == expected_old and new_last_num == expected_old:
+            if old_last_num == expected_old or new_last_num == expected_old:
                 old_sequence = old_last_num
                 new_sequence = new_last_num
+        
+        if old_sequence is None:
+            # Try to extract pattern without exact sequence matching
+            # Use the last number from each name as the sequence number
+            if old_numbers and new_numbers:
+                old_sequence = int(old_numbers[-1])
+                new_sequence = int(new_numbers[-1])
         
         if old_sequence is None:
             return None
