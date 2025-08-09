@@ -45,6 +45,23 @@ The application uses a **centralized state management** pattern:
 - **UI State**: Interface element states and user preferences
 - **Threading**: Background processing for non-blocking UI operations
 
+## Recent Updates (January 2025)
+
+### New Features Added
+- **URL PDF Loading**: Direct PDF loading from Google Drive and other URLs with automatic link conversion
+- **Crop Renaming**: Individual crop renaming functionality with dialog interface
+- **Sequential Naming Templates**: Updated to Q{:04d}, A{:04d}, H{:04d} format as requested
+- **Keyboard Shortcuts**: Comprehensive shortcuts for all major operations
+- **Undo Functionality**: Ctrl+Z to undo last crop selection
+- **Enhanced Navigation**: Delete/Backspace keys for crop deletion
+- **Google Drive Integration**: Framework for uploading exported crops (requires API setup)
+
+### Keyboard Shortcuts
+- **File Operations**: Ctrl+O (Open), Ctrl+U (URL Load), Ctrl+E (Export), Ctrl+G (Upload to Drive)
+- **View Controls**: Ctrl+Plus/Minus (Zoom), Ctrl+0 (Reset), Ctrl+W (Fit Width)
+- **Crop Management**: Ctrl+Z (Undo), Delete/Backspace (Remove Selected)
+- **Navigation**: Arrow keys, Page Up/Down, Home/End for page navigation
+
 ## External Dependencies
 
 ### Core PDF Processing
@@ -54,6 +71,11 @@ The application uses a **centralized state management** pattern:
 ### UI Framework
 - **Tkinter**: Native Python GUI framework for cross-platform desktop interface
 - **ttk**: Themed Tkinter widgets for modern UI appearance
+
+### Network and File Operations
+- **urllib**: URL downloading and parsing for PDF loading from web sources
+- **tempfile**: Temporary file handling for downloaded PDFs
+- **shutil**: File operations for download management
 
 ### System Integration
 - **pathlib**: Modern path handling for cross-platform file operations

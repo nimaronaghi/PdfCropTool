@@ -3,12 +3,16 @@ PDF Viewer Component - Main UI and PDF Display Logic
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import os
 import io
 import threading
+import urllib.request
+import urllib.parse
+import tempfile
+import shutil
 from pathlib import Path
 
 from ui_components import CropFrame, NamingFrame, ControlFrame
@@ -29,6 +33,9 @@ class PDFViewerApp:
         
         self.setup_ui()
         self.setup_bindings()
+        
+        # Initialize crop history for undo functionality
+        self.crop_history = []
         
     def setup_ui(self):
         """Initialize the user interface"""
@@ -120,6 +127,10 @@ class PDFViewerApp:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Open PDF...", command=self.open_pdf, accelerator="Ctrl+O")
+        file_menu.add_command(label="Load PDF from URL...", command=self.load_pdf_from_url, accelerator="Ctrl+U")
+        file_menu.add_separator()
+        file_menu.add_command(label="Export Crops", command=self.export_all_crops, accelerator="Ctrl+E")
+        file_menu.add_command(label="Upload to Google Drive", command=self.upload_to_drive, accelerator="Ctrl+G")
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit, accelerator="Ctrl+Q")
         
@@ -134,6 +145,9 @@ class PDFViewerApp:
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Undo Last Crop", command=self.undo_last_crop, accelerator="Ctrl+Z")
+        tools_menu.add_command(label="Delete Selected Crop", command=self.delete_selected_crop, accelerator="Delete")
+        tools_menu.add_separator()
         tools_menu.add_command(label="Clear All Crops", command=self.clear_all_crops)
         tools_menu.add_command(label="Export All Crops", command=self.export_all_crops)
         
@@ -144,7 +158,9 @@ class PDFViewerApp:
         file_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Button(file_frame, text="Open PDF", command=self.open_pdf).pack(fill=tk.X, pady=2)
+        ttk.Button(file_frame, text="Load from URL", command=self.load_pdf_from_url).pack(fill=tk.X, pady=2)
         ttk.Button(file_frame, text="Select Output Folder", command=self.select_output_directory).pack(fill=tk.X, pady=2)
+        ttk.Button(file_frame, text="Upload to Drive", command=self.upload_to_drive).pack(fill=tk.X, pady=2)
         
         # PDF info frame
         self.info_frame = ttk.LabelFrame(self.left_panel, text="PDF Information", padding=10)
@@ -292,25 +308,7 @@ class PDFViewerApp:
         self.progress_bar = ttk.Progressbar(self.status_bar, mode='indeterminate')
         # Initially hidden
         
-    def setup_bindings(self):
-        """Setup keyboard bindings"""
-        self.root.bind("<Control-o>", lambda e: self.open_pdf())
-        self.root.bind("<Control-q>", lambda e: self.root.quit())
-        self.root.bind("<Control-plus>", lambda e: self.zoom_in())
-        self.root.bind("<Control-minus>", lambda e: self.zoom_out())
-        self.root.bind("<Control-0>", lambda e: self.reset_zoom())
-        self.root.bind("<Control-w>", lambda e: self.fit_to_width())
-        self.root.bind("<Left>", lambda e: self.previous_page())
-        self.root.bind("<Right>", lambda e: self.next_page())
-        self.root.bind("<Home>", lambda e: self.first_page())
-        self.root.bind("<End>", lambda e: self.last_page())
-        self.root.bind("<Control-g>", lambda e: self.focus_page_entry())
-        self.root.bind("<Page_Up>", lambda e: self.previous_page())
-        self.root.bind("<Page_Down>", lambda e: self.next_page())
-        
-        # Enable drag and drop (simplified for cross-platform compatibility)
-        # Note: Advanced drag-drop functionality would require tkinterdnd2
-        # For now, we'll rely on file menu only
+
         
     def show_welcome_message(self):
         """Show welcome message when no PDF is loaded"""
@@ -708,6 +706,9 @@ class PDFViewerApp:
             }
             self.crop_selections.append(crop_data)
             
+            # Add to history for undo functionality
+            self.crop_history.append(len(self.crop_selections) - 1)
+            
             # Update crop list
             self.crop_frame.update_crop_list(self.crop_selections)
             
@@ -764,6 +765,7 @@ class PDFViewerApp:
             result = messagebox.askyesno("Confirm", "Clear all crop selections?")
             if result:
                 self.crop_selections = []
+                self.crop_history = []
                 self.crop_frame.update_crop_list([])
                 self.redraw_crop_rectangles()
                 
@@ -969,3 +971,193 @@ class PDFViewerApp:
         self.status_label.config(text="Ready")
         messagebox.showerror("Save Error", 
                            f"Failed to save crop #{crop_number}: {error_msg}")
+    
+    def load_pdf_from_url(self):
+        """Load PDF from URL (supports Google Drive direct download links)"""
+        url = simpledialog.askstring("Load PDF from URL", 
+                                    "Enter PDF URL:\n(For Google Drive: File → Share → Copy link,\nthen replace '/view' with '/export?format=pdf')")
+        if not url:
+            return
+            
+        # Convert Google Drive share links to direct download links
+        if "drive.google.com" in url:
+            if "/view" in url:
+                url = url.replace("/view?usp=sharing", "/export?format=pdf")
+                url = url.replace("/view", "/export?format=pdf")
+            elif "/file/d/" in url:
+                # Extract file ID and create direct download link
+                file_id = url.split("/file/d/")[1].split("/")[0]
+                url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        
+        self.status_label.config(text="Downloading PDF...")
+        self.progress_bar.pack(side=tk.RIGHT, padx=(10, 0))
+        self.progress_bar.start()
+        
+        # Download in background thread
+        threading.Thread(target=self._download_pdf_thread, args=(url,), daemon=True).start()
+        
+    def _download_pdf_thread(self, url):
+        """Download PDF from URL in background thread"""
+        try:
+            # Create temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            temp_path = temp_file.name
+            temp_file.close()
+            
+            # Download file
+            with urllib.request.urlopen(url) as response:
+                with open(temp_path, 'wb') as f:
+                    shutil.copyfileobj(response, f)
+            
+            # Load the downloaded PDF
+            self.root.after(0, self._pdf_download_complete_callback, temp_path, url)
+            
+        except Exception as e:
+            self.root.after(0, self._pdf_download_error_callback, str(e))
+            
+    def _pdf_download_complete_callback(self, temp_path, url):
+        """Callback when PDF download is complete"""
+        try:
+            # Load the PDF
+            self.pdf_document = fitz.open(temp_path)
+            self.current_page = 0
+            self.pdf_images = []
+            self.crop_selections = []
+            self.crop_history = []
+            
+            # Update UI
+            self.progress_bar.stop()
+            self.progress_bar.pack_forget()
+            
+            # Extract filename from URL for display
+            parsed_url = urllib.parse.urlparse(url)
+            filename = os.path.basename(parsed_url.path) or "downloaded_pdf.pdf"
+            if not filename.endswith('.pdf'):
+                filename += '.pdf'
+                
+            self.status_label.config(text=f"Loaded: {filename}")
+            
+            # Update PDF info
+            self.update_pdf_info_from_url(url, temp_path)
+            
+            # Render first page
+            self.render_current_page()
+            
+            # Update navigation
+            self.update_navigation()
+            
+        except Exception as e:
+            self.progress_bar.stop()
+            self.progress_bar.pack_forget()
+            self.status_label.config(text="Ready")
+            messagebox.showerror("Error", f"Failed to load downloaded PDF: {str(e)}")
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+                
+    def _pdf_download_error_callback(self, error_msg):
+        """Callback when PDF download fails"""
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.status_label.config(text="Ready")
+        messagebox.showerror("Download Error", f"Failed to download PDF: {error_msg}")
+        
+    def update_pdf_info_from_url(self, url, file_path):
+        """Update PDF info display for URL-loaded PDF"""
+        self.info_text.config(state=tk.NORMAL)
+        self.info_text.delete(1.0, tk.END)
+        
+        try:
+            # Get basic file info
+            file_size = os.path.getsize(file_path)
+            size_mb = file_size / (1024 * 1024)
+            
+            info = f"Source: URL\n"
+            info += f"URL: {url[:50]}{'...' if len(url) > 50 else ''}\n"
+            info += f"Pages: {len(self.pdf_document)}\n"
+            info += f"Size: {size_mb:.1f} MB\n"
+            
+            # Get PDF metadata if available
+            if self.pdf_document:
+                metadata = self.pdf_document.metadata
+                if metadata and metadata.get('title'):
+                    info += f"Title: {metadata['title']}\n"
+                if metadata and metadata.get('author'):
+                    info += f"Author: {metadata['author']}\n"
+                
+            self.info_text.insert(tk.END, info)
+        except Exception as e:
+            self.info_text.insert(tk.END, f"Error reading PDF info: {str(e)}")
+            
+        self.info_text.config(state=tk.DISABLED)
+        
+    def upload_to_drive(self):
+        """Upload exported crops to Google Drive folder"""
+        if not self.crop_selections:
+            messagebox.showwarning("No Crops", "No crops to upload. Please create some crop selections first.")
+            return
+            
+        drive_folder_url = simpledialog.askstring("Upload to Google Drive", 
+                                                 "Enter Google Drive folder URL:\n(Share the folder and paste the link)")
+        if not drive_folder_url:
+            return
+            
+        messagebox.showinfo("Upload to Google Drive", 
+                           "Google Drive upload functionality requires API setup.\n\n"
+                           "For now, please:\n"
+                           "1. Export crops to local folder\n"
+                           "2. Manually upload the folder to Google Drive\n\n"
+                           "API integration can be added later with proper authentication.")
+        
+    def undo_last_crop(self):
+        """Undo the last crop selection"""
+        if not self.crop_history:
+            return
+            
+        # Remove the last crop
+        last_crop_index = self.crop_history.pop()
+        if last_crop_index < len(self.crop_selections):
+            self.crop_selections.pop(last_crop_index)
+            
+            # Update crop list and redraw
+            self.crop_frame.update_crop_list(self.crop_selections)
+            self.redraw_crop_rectangles()
+            
+    def delete_selected_crop(self):
+        """Delete the currently selected crop"""
+        # Get selected crop from crop frame
+        selection = self.crop_frame.crop_listbox.curselection()
+        if selection:
+            crop_index = selection[0]
+            self.remove_crop(crop_index)
+            
+    def setup_bindings(self):
+        """Setup keyboard bindings"""
+        # File operations
+        self.root.bind('<Control-o>', lambda e: self.open_pdf())
+        self.root.bind('<Control-u>', lambda e: self.load_pdf_from_url())
+        self.root.bind('<Control-e>', lambda e: self.export_all_crops())
+        self.root.bind('<Control-g>', lambda e: self.upload_to_drive())
+        self.root.bind('<Control-q>', lambda e: self.root.quit())
+        
+        # View operations
+        self.root.bind('<Control-equal>', lambda e: self.zoom_in())  # Ctrl+= (same key as +)
+        self.root.bind('<Control-plus>', lambda e: self.zoom_in())   # Ctrl++ if available
+        self.root.bind('<Control-minus>', lambda e: self.zoom_out())
+        self.root.bind('<Control-0>', lambda e: self.reset_zoom())
+        self.root.bind('<Control-w>', lambda e: self.fit_to_width())
+        
+        # Crop operations
+        self.root.bind('<Control-z>', lambda e: self.undo_last_crop())
+        self.root.bind('<Delete>', lambda e: self.delete_selected_crop())
+        self.root.bind('<BackSpace>', lambda e: self.delete_selected_crop())
+        
+        # Navigation shortcuts
+        self.root.bind("<Left>", lambda e: self.previous_page())
+        self.root.bind("<Right>", lambda e: self.next_page())
+        self.root.bind("<Home>", lambda e: self.first_page())
+        self.root.bind("<End>", lambda e: self.last_page())
+        self.root.bind("<Page_Up>", lambda e: self.previous_page())
+        self.root.bind("<Page_Down>", lambda e: self.next_page())
