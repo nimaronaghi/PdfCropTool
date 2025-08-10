@@ -12,6 +12,8 @@ PDF Figure Extractor is a Windows desktop application designed to extract high-q
 - **Enhanced Double-Click Rename**: Made crop renaming work immediately on double-click without delay for better user experience
 - **Interactive Duplicate Handling**: Added user confirmation dialogs for duplicate names in crops and file exports with choice to accept suggestions or cancel
 - **Auto-Popup Naming**: Added automatic naming dialog when creating new crops (unless sequential naming is enabled) for immediate customization
+- **Enhanced Crop Rejection**: When user rejects duplicate crop names, the crop is completely removed (drawing disappears) instead of auto-renaming
+- **Advanced Batch Export**: Interactive conflict resolution dialog where users can double-click to rename files directly before export
 
 ## User Preferences
 

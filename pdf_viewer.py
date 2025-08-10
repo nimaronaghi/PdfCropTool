@@ -1249,24 +1249,56 @@ class PDFViewerApp:
         list_frame = ttk.Frame(main_frame)
         list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
-        # Create treeview for conflicts
-        columns = ('crop', 'existing', 'suggested')
+        # Create treeview for conflicts with rename capability
+        columns = ('crop', 'existing', 'new_name')
         tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
         tree.heading('crop', text='Crop')
         tree.heading('existing', text='Existing File')
-        tree.heading('suggested', text='Suggested Name')
+        tree.heading('new_name', text='New Name')
         
         tree.column('crop', width=100)
         tree.column('existing', width=200)
-        tree.column('suggested', width=200)
+        tree.column('new_name', width=200)
         
-        # Add conflicts to tree
-        for conflict in conflicts:
-            tree.insert('', 'end', values=(
+        # Store conflict data with rename capability
+        conflict_data = {}
+        for i, conflict in enumerate(conflicts):
+            item_id = tree.insert('', 'end', values=(
                 f"Crop #{conflict['crop_index'] + 1}",
                 conflict['original_name'],
                 conflict['suggested_name']
             ))
+            conflict_data[item_id] = {
+                'conflict': conflict,
+                'new_name': conflict['suggested_name']
+            }
+        
+        # Double-click to rename
+        def on_double_click(event):
+            item = tree.selection()[0] if tree.selection() else None
+            if item and item in conflict_data:
+                current_name = conflict_data[item]['new_name']
+                # Remove .png extension for editing
+                base_name = current_name[:-4] if current_name.endswith('.png') else current_name
+                
+                new_name = simpledialog.askstring("Rename File", 
+                    f"Enter new name for {conflict_data[item]['conflict']['original_name']}:",
+                    initialvalue=base_name)
+                
+                if new_name:
+                    # Ensure .png extension
+                    if not new_name.endswith('.png'):
+                        new_name += '.png'
+                    
+                    # Update the display and stored data
+                    conflict_data[item]['new_name'] = new_name
+                    tree.item(item, values=(
+                        tree.item(item, 'values')[0],  # Keep crop number
+                        tree.item(item, 'values')[1],  # Keep existing name
+                        new_name
+                    ))
+        
+        tree.bind('<Double-1>', on_double_click)
         
         # Scrollbar for tree
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
@@ -1275,14 +1307,19 @@ class PDFViewerApp:
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Instructions
+        instructions = ttk.Label(main_frame, text="Double-click on 'New Name' column to rename files", 
+                                font=("TkDefaultFont", 9), foreground="gray")
+        instructions.pack(anchor=tk.W, pady=(5, 10))
+        
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
         
-        result = {'action': None}
+        result = {'action': None, 'conflict_data': conflict_data}
         
-        def use_suggested():
-            result['action'] = 'suggested'
+        def use_new_names():
+            result['action'] = 'rename'
             conflict_dialog.destroy()
             
         def skip_conflicts():
@@ -1293,8 +1330,8 @@ class PDFViewerApp:
             result['action'] = 'cancel'
             conflict_dialog.destroy()
         
-        ttk.Button(button_frame, text="Use Suggested Names", 
-                  command=use_suggested).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="Use New Names", 
+                  command=use_new_names).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(button_frame, text="Skip Conflicting Files", 
                   command=skip_conflicts).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(button_frame, text="Cancel Export", 
@@ -1304,13 +1341,17 @@ class PDFViewerApp:
         conflict_dialog.wait_window()
         
         # Process based on user choice
-        if result['action'] == 'suggested':
-            # Add conflicts with suggested names to export queue
-            for conflict in conflicts:
+        if result['action'] == 'rename':
+            # Add conflicts with user-specified names to export queue
+            for item_id, data in result['conflict_data'].items():
+                conflict = data['conflict']
+                new_filename = data['new_name']
+                new_path = os.path.join(self.output_directory, new_filename)
+                
                 export_queue.append({
                     'crop_index': conflict['crop_index'],
                     'crop': conflict['crop'],
-                    'path': conflict['suggested_path']
+                    'path': new_path
                 })
         elif result['action'] == 'skip':
             # Don't add conflicts to export queue

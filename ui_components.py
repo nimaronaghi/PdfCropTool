@@ -294,8 +294,9 @@ class CropFrame(ttk.LabelFrame):
                         f"Name '{base_name}' already exists.\n\nUse suggested name '{new_name}' instead?")
                     
                     if not response:
-                        # User declined, cancel the rename
+                        # User declined, remove the crop entirely
                         dialog.destroy()
+                        self.app.remove_crop(crop_index)
                         return
                     # If user accepted, continue with new_name
                 
