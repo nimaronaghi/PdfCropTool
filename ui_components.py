@@ -289,8 +289,15 @@ class CropFrame(ttk.LabelFrame):
                         new_name = f"{base_name}_{counter}"
                         counter += 1
                     
-                    # Notify user of the change
-                    messagebox.showinfo("Name Modified", f"Name already exists.\nRenamed to: {new_name}")
+                    # Ask user for confirmation of the new name
+                    response = messagebox.askyesno("Duplicate Name", 
+                        f"Name '{base_name}' already exists.\n\nUse suggested name '{new_name}' instead?")
+                    
+                    if not response:
+                        # User declined, cancel the rename
+                        dialog.destroy()
+                        return
+                    # If user accepted, continue with new_name
                 
                 # Learn from the rename pattern
                 self.app.learn_from_rename(crop_index, current_name, new_name)

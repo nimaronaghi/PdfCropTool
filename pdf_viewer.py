@@ -1044,6 +1044,11 @@ class PDFViewerApp:
             # Update crop list and scroll to bottom
             self.crop_frame.update_crop_list(self.crop_selections, scroll_to_end=True)
             
+            # Auto-popup naming dialog unless sequential naming is enabled
+            if not self.use_sequential_naming:
+                # Schedule the naming dialog to appear after the UI updates
+                self.root.after(10, lambda: self.crop_frame.show_rename_dialog(len(self.crop_selections) - 1))
+            
             # Redraw all crop rectangles to ensure proper display
             self.redraw_crop_rectangles()
             
@@ -1169,7 +1174,9 @@ class PDFViewerApp:
     def _export_crops_thread(self, extractor):
         """Export crops in background thread"""
         try:
-            exported_count = 0
+            # First pass: collect all conflicts
+            conflicts = []
+            export_queue = []
             
             for i, crop in enumerate(self.crop_selections):
                 # Generate filename based on naming mode
@@ -1188,13 +1195,144 @@ class PDFViewerApp:
                     
                 output_path = os.path.join(self.output_directory, filename)
                 
-                # Get unique filename if file already exists
-                unique_path = get_unique_filename(output_path)
-                if unique_path != output_path:
-                    print(f"File exists, saving as: {os.path.basename(unique_path)}")
+                if os.path.exists(output_path):
+                    unique_path = get_unique_filename(output_path)
+                    conflicts.append({
+                        'crop_index': i,
+                        'crop': crop,
+                        'original_path': output_path,
+                        'suggested_path': unique_path,
+                        'original_name': os.path.basename(output_path),
+                        'suggested_name': os.path.basename(unique_path)
+                    })
+                else:
+                    export_queue.append({'crop_index': i, 'crop': crop, 'path': output_path})
+            
+            # Handle conflicts if any
+            if conflicts:
+                # Ask user about conflicts in main thread and wait for response
+                self.root.after(0, self._handle_batch_conflicts, conflicts, export_queue, extractor)
+            else:
+                # No conflicts, proceed with export
+                self._process_export_queue(export_queue, extractor)
+            
+        except Exception as e:
+            self.root.after(0, self._export_error_callback, str(e))
+            
+    def _handle_batch_conflicts(self, conflicts, export_queue, extractor):
+        """Handle file conflicts during batch export"""
+        if not conflicts:
+            self._process_export_queue(export_queue, extractor)
+            return
+        
+        # Create dialog to show all conflicts
+        conflict_dialog = tk.Toplevel(self.root)
+        conflict_dialog.title("File Conflicts")
+        conflict_dialog.geometry("600x400")
+        conflict_dialog.resizable(True, True)
+        conflict_dialog.transient(self.root)
+        conflict_dialog.grab_set()
+        
+        # Center the dialog
+        conflict_dialog.update_idletasks()
+        x = (conflict_dialog.winfo_screenwidth() // 2) - (conflict_dialog.winfo_width() // 2)
+        y = (conflict_dialog.winfo_screenheight() // 2) - (conflict_dialog.winfo_height() // 2)
+        conflict_dialog.geometry(f"+{x}+{y}")
+        
+        main_frame = ttk.Frame(conflict_dialog, padding=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text=f"Found {len(conflicts)} file conflicts. Choose how to handle them:", 
+                 font=("TkDefaultFont", 10, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Scrollable list of conflicts
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Create treeview for conflicts
+        columns = ('crop', 'existing', 'suggested')
+        tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
+        tree.heading('crop', text='Crop')
+        tree.heading('existing', text='Existing File')
+        tree.heading('suggested', text='Suggested Name')
+        
+        tree.column('crop', width=100)
+        tree.column('existing', width=200)
+        tree.column('suggested', width=200)
+        
+        # Add conflicts to tree
+        for conflict in conflicts:
+            tree.insert('', 'end', values=(
+                f"Crop #{conflict['crop_index'] + 1}",
+                conflict['original_name'],
+                conflict['suggested_name']
+            ))
+        
+        # Scrollbar for tree
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+        
+        result = {'action': None}
+        
+        def use_suggested():
+            result['action'] = 'suggested'
+            conflict_dialog.destroy()
+            
+        def skip_conflicts():
+            result['action'] = 'skip'
+            conflict_dialog.destroy()
+            
+        def cancel_export():
+            result['action'] = 'cancel'
+            conflict_dialog.destroy()
+        
+        ttk.Button(button_frame, text="Use Suggested Names", 
+                  command=use_suggested).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="Skip Conflicting Files", 
+                  command=skip_conflicts).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="Cancel Export", 
+                  command=cancel_export).pack(side=tk.RIGHT)
+        
+        # Wait for user decision
+        conflict_dialog.wait_window()
+        
+        # Process based on user choice
+        if result['action'] == 'suggested':
+            # Add conflicts with suggested names to export queue
+            for conflict in conflicts:
+                export_queue.append({
+                    'crop_index': conflict['crop_index'],
+                    'crop': conflict['crop'],
+                    'path': conflict['suggested_path']
+                })
+        elif result['action'] == 'skip':
+            # Don't add conflicts to export queue
+            pass
+        else:  # cancel
+            self._export_cancelled_callback()
+            return
+        
+        # Continue with export
+        threading.Thread(target=self._process_export_queue, args=(export_queue, extractor), daemon=True).start()
+    
+    def _process_export_queue(self, export_queue, extractor):
+        """Process the export queue"""
+        try:
+            exported_count = 0
+            
+            for item in export_queue:
+                crop = item['crop']
+                output_path = item['path']
                 
                 # Extract and save crop
-                metadata = extractor.extract_crop(crop, unique_path)
+                metadata = extractor.extract_crop(crop, output_path)
                 if metadata:
                     exported_count += 1
                     
@@ -1203,7 +1341,7 @@ class PDFViewerApp:
             
         except Exception as e:
             self.root.after(0, self._export_error_callback, str(e))
-            
+    
     def _export_complete_callback(self, exported_count, total_count):
         """Callback when export is complete"""
         self.progress_bar.stop()
@@ -1216,7 +1354,7 @@ class PDFViewerApp:
         else:
             messagebox.showwarning("Export Partial", 
                                  f"Exported {exported_count} of {total_count} images.\n"
-                                 f"Some exports may have failed.")
+                                 f"Some exports may have failed or were skipped.")
             
     def _export_error_callback(self, error_msg):
         """Callback when export fails"""
@@ -1224,6 +1362,12 @@ class PDFViewerApp:
         self.progress_bar.pack_forget()
         self.status_label.config(text="Ready")
         messagebox.showerror("Export Error", f"Export failed: {error_msg}")
+        
+    def _export_cancelled_callback(self):
+        """Callback when export is cancelled"""
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.status_label.config(text="Ready")
         
     def update_naming_pattern(self, pattern):
         """Update the naming pattern for exported files"""
@@ -1290,16 +1434,29 @@ class PDFViewerApp:
     def _save_individual_crop_thread(self, crop, file_path, crop_number):
         """Save individual crop in background thread"""
         try:
-            # Get unique filename if file already exists
-            unique_path = get_unique_filename(file_path)
-            if unique_path != file_path:
-                print(f"File exists, saving as: {os.path.basename(unique_path)}")
+            # Check if file already exists and ask user
+            if os.path.exists(file_path):
+                unique_path = get_unique_filename(file_path)
+                suggested_name = os.path.basename(unique_path)
+                original_name = os.path.basename(file_path)
+                
+                response = messagebox.askyesno("File Exists", 
+                    f"File '{original_name}' already exists.\n\nUse suggested name '{suggested_name}' instead?")
+                
+                if not response:
+                    # User declined, don't save
+                    self.root.after(0, self._individual_save_cancelled_callback)
+                    return
+                    
+                final_path = unique_path
+            else:
+                final_path = file_path
             
             extractor = ImageExtractor(self.pdf_document)
-            metadata = extractor.extract_crop(crop, unique_path)
+            metadata = extractor.extract_crop(crop, final_path)
             
             # Update UI in main thread with the actual path used
-            self.root.after(0, self._individual_save_complete_callback, metadata, unique_path, crop_number)
+            self.root.after(0, self._individual_save_complete_callback, metadata, final_path, crop_number)
             
         except Exception as e:
             self.root.after(0, self._individual_save_error_callback, str(e), crop_number)
@@ -1346,6 +1503,12 @@ class PDFViewerApp:
         self.status_label.config(text="Ready")
         messagebox.showerror("Save Error", 
                            f"Failed to save crop #{crop_number}: {error_msg}")
+                           
+    def _individual_save_cancelled_callback(self):
+        """Callback when individual crop save is cancelled by user"""
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.status_label.config(text="Ready")
     
     def load_pdf_from_url(self):
         """Load PDF from URL with streamlined interface"""
