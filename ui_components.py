@@ -101,7 +101,7 @@ class CropFrame(ttk.LabelFrame):
         self.crop_listbox.bind("<Button-4>", _on_listbox_mousewheel)    # Linux scroll up
         self.crop_listbox.bind("<Button-5>", _on_listbox_mousewheel)    # Linux scroll down
         
-    def update_crop_list(self, crop_selections):
+    def update_crop_list(self, crop_selections, scroll_to_end=False):
         """Update the crop list display with quality information"""
         self.crop_listbox.delete(0, tk.END)
         
@@ -137,6 +137,10 @@ class CropFrame(ttk.LabelFrame):
             else:
                 item_text = f"#{i+1}: Page {page_num} ({width}×{height}){quality_info}"
             self.crop_listbox.insert(tk.END, item_text)
+            
+        # Auto-scroll to end when requested (for new crops)
+        if scroll_to_end and len(crop_selections) > 0:
+            self.crop_listbox.see(tk.END)
             
         # Update button states
         self.remove_btn.config(state=tk.DISABLED)
@@ -274,12 +278,30 @@ class CropFrame(ttk.LabelFrame):
         def save_name():
             new_name = name_var.get().strip()
             if new_name and new_name != current_name:
+                # Check for duplicate names and append number if needed
+                existing_names = [crop.get('custom_name', '') for i, crop in enumerate(self.app.crop_selections) if i != crop_index]
+                
+                if new_name in existing_names:
+                    # Find a unique name by appending a number
+                    base_name = new_name
+                    counter = 2
+                    while new_name in existing_names:
+                        new_name = f"{base_name}_{counter}"
+                        counter += 1
+                    
+                    # Notify user of the change
+                    messagebox.showinfo("Name Modified", f"Name already exists.\nRenamed to: {new_name}")
+                
                 # Learn from the rename pattern
                 self.app.learn_from_rename(crop_index, current_name, new_name)
                 
                 # Update the crop name
                 self.app.crop_selections[crop_index]['custom_name'] = new_name
                 self.update_crop_list(self.app.crop_selections)
+                
+                # Auto-scroll to show the renamed item
+                self.crop_listbox.see(crop_index)
+                
             dialog.destroy()
             
         def cancel():

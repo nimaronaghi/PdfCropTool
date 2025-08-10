@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ui_components import CropFrame, NamingFrame, ControlFrame
 from image_extractor import ImageExtractor
-from utils import format_file_size, get_pdf_info
+from utils import format_file_size, get_pdf_info, get_unique_filename
 
 class PDFViewerApp:
     def __init__(self, root):
@@ -331,6 +331,10 @@ class PDFViewerApp:
         self.canvas.bind("<B1-Motion>", self.update_crop)
         self.canvas.bind("<ButtonRelease-1>", self.finish_crop)
         
+        # Bind mouse motion for crosshair guides
+        self.canvas.bind("<Motion>", self.show_crosshair)
+        self.canvas.bind("<Leave>", self.hide_crosshair)
+        
         # Enhanced mouse wheel scrolling for PDF canvas
         def _on_canvas_mousewheel(event):
             try:
@@ -430,8 +434,11 @@ class PDFViewerApp:
         self.current_file_path = file_path  # Store for default naming
         self.current_page = 0
         self.pdf_images = []
-        self.crop_selections = []
+        self.crop_selections = []  # Clear previous crops
         self.crop_history = []
+        
+        # Update the crop list UI to reflect cleared selections
+        self.crop_frame.update_crop_list(self.crop_selections)
         
         # Update UI
         self.progress_bar.stop()
@@ -896,11 +903,52 @@ class PDFViewerApp:
     # Zoom functionality removed - was causing display issues
     # Cropping system now works at fixed 1.0 zoom level for reliability
             
+    def show_crosshair(self, event):
+        """Show crosshair guides at cursor position"""
+        if not self.pdf_document:
+            return
+            
+        # Delete existing crosshair
+        self.canvas.delete("crosshair")
+        
+        # Get canvas coordinates
+        canvas_x = self.canvas.canvasx(event.x)
+        canvas_y = self.canvas.canvasy(event.y)
+        
+        # Get canvas dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        # Get scroll region to determine actual content size
+        scroll_region = self.canvas.cget('scrollregion')
+        if scroll_region:
+            scroll_bounds = [float(x) for x in scroll_region.split()]
+            max_x = scroll_bounds[2]
+            max_y = scroll_bounds[3]
+        else:
+            max_x = canvas_width
+            max_y = canvas_height
+        
+        # Draw vertical line
+        self.canvas.create_line(canvas_x, 0, canvas_x, max_y, 
+                               fill="#808080", dash=(5, 5), width=1, tags="crosshair")
+        
+        # Draw horizontal line
+        self.canvas.create_line(0, canvas_y, max_x, canvas_y, 
+                               fill="#808080", dash=(5, 5), width=1, tags="crosshair")
+                               
+    def hide_crosshair(self, event):
+        """Hide crosshair guides when cursor leaves canvas"""
+        self.canvas.delete("crosshair")
+        
     def start_crop(self, event):
         """Start crop selection"""
         if not self.pdf_document:
             return
             
+        # Hide crosshair during cropping
+        self.canvas.delete("crosshair")
+        
         # Convert canvas coordinates to image coordinates
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
@@ -935,6 +983,9 @@ class PDFViewerApp:
             
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
+        
+        # Re-enable crosshair after cropping
+        self.show_crosshair(event)
         
         # Calculate crop rectangle
         x1, y1 = self.crop_start
@@ -990,8 +1041,8 @@ class PDFViewerApp:
             # Add to history for undo functionality
             self.crop_history.append(len(self.crop_selections) - 1)
             
-            # Update crop list
-            self.crop_frame.update_crop_list(self.crop_selections)
+            # Update crop list and scroll to bottom
+            self.crop_frame.update_crop_list(self.crop_selections, scroll_to_end=True)
             
             # Redraw all crop rectangles to ensure proper display
             self.redraw_crop_rectangles()
@@ -1137,8 +1188,13 @@ class PDFViewerApp:
                     
                 output_path = os.path.join(self.output_directory, filename)
                 
+                # Get unique filename if file already exists
+                unique_path = get_unique_filename(output_path)
+                if unique_path != output_path:
+                    print(f"File exists, saving as: {os.path.basename(unique_path)}")
+                
                 # Extract and save crop
-                metadata = extractor.extract_crop(crop, output_path)
+                metadata = extractor.extract_crop(crop, unique_path)
                 if metadata:
                     exported_count += 1
                     
@@ -1234,11 +1290,16 @@ class PDFViewerApp:
     def _save_individual_crop_thread(self, crop, file_path, crop_number):
         """Save individual crop in background thread"""
         try:
-            extractor = ImageExtractor(self.pdf_document)
-            metadata = extractor.extract_crop(crop, file_path)
+            # Get unique filename if file already exists
+            unique_path = get_unique_filename(file_path)
+            if unique_path != file_path:
+                print(f"File exists, saving as: {os.path.basename(unique_path)}")
             
-            # Update UI in main thread
-            self.root.after(0, self._individual_save_complete_callback, metadata, file_path, crop_number)
+            extractor = ImageExtractor(self.pdf_document)
+            metadata = extractor.extract_crop(crop, unique_path)
+            
+            # Update UI in main thread with the actual path used
+            self.root.after(0, self._individual_save_complete_callback, metadata, unique_path, crop_number)
             
         except Exception as e:
             self.root.after(0, self._individual_save_error_callback, str(e), crop_number)

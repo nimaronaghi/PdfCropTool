@@ -8,6 +8,33 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from datetime import datetime
 
+def get_unique_filename(filepath):
+    """
+    Get a unique filename by appending a number if the file already exists.
+    
+    Args:
+        filepath: Desired file path
+        
+    Returns:
+        str: Unique file path
+    """
+    if not os.path.exists(filepath):
+        return filepath
+    
+    # Split into base and extension
+    path = Path(filepath)
+    directory = path.parent
+    stem = path.stem
+    suffix = path.suffix
+    
+    # Try adding numbers until we find one that doesn't exist
+    counter = 2
+    while True:
+        new_path = directory / f"{stem}_{counter}{suffix}"
+        if not new_path.exists():
+            return str(new_path)
+        counter += 1
+
 def format_file_size(size_bytes):
     """
     Format file size in human readable format
@@ -143,38 +170,7 @@ def ensure_directory_exists(directory_path):
         print(f"Error creating directory {directory_path}: {str(e)}")
         return False
 
-def get_unique_filename(directory, base_filename):
-    """
-    Get a unique filename by adding numbers if file exists
-    
-    Args:
-        directory: Directory path
-        base_filename: Base filename
-        
-    Returns:
-        str: Unique filename
-    """
-    filepath = os.path.join(directory, base_filename)
-    
-    if not os.path.exists(filepath):
-        return base_filename
-        
-    # Split filename and extension
-    name, ext = os.path.splitext(base_filename)
-    
-    counter = 1
-    while True:
-        new_filename = f"{name}_{counter}{ext}"
-        new_filepath = os.path.join(directory, new_filename)
-        
-        if not os.path.exists(new_filepath):
-            return new_filename
-            
-        counter += 1
-        
-        # Safety check to prevent infinite loop
-        if counter > 9999:
-            return f"{name}_{counter}{ext}"
+# Removed duplicate get_unique_filename function - using the one at line 11
 
 def calculate_crop_dpi(crop_coords, zoom_level, target_pixels=1920):
     """
