@@ -140,29 +140,18 @@ class ImageExtractor:
                 'source_quality': 'Maximum Available from PDF'
             }
             
-            # Determine output format based on content and size
-            file_size_mb = (pil_image.width * pil_image.height * 3) / (1024 * 1024)
+            # Always use PNG format - preserves exact DPI and quality without compression artifacts
+            # Ensure output path has .png extension
+            if not output_path.lower().endswith('.png'):
+                output_path = output_path.rsplit('.', 1)[0] + '.png'
             
-            if file_size_mb > 50:  # If estimated size > 50MB, use JPEG with high quality
-                if not output_path.lower().endswith('.jpg') and not output_path.lower().endswith('.jpeg'):
-                    output_path = output_path.rsplit('.', 1)[0] + '.jpg'
-                
-                pil_image.save(
-                    output_path,
-                    "JPEG",
-                    dpi=(actual_dpi, actual_dpi),
-                    quality=95,  # High quality JPEG
-                    optimize=True
-                )
-            else:
-                # Use PNG for smaller files to preserve quality
-                pil_image.save(
-                    output_path,
-                    "PNG",
-                    dpi=(actual_dpi, actual_dpi),
-                    optimize=True,  # PNG optimization without quality loss
-                    compress_level=6  # Moderate compression for reasonable file size
-                )
+            pil_image.save(
+                output_path,
+                "PNG",
+                dpi=(actual_dpi, actual_dpi),
+                optimize=True,  # PNG optimization without quality loss
+                compress_level=6  # Moderate compression for reasonable file size
+            )
             
             return metadata
             
@@ -211,6 +200,11 @@ class ImageExtractor:
                         pil_image = Image.open(io.BytesIO(img_data))
                         
                         actual_dpi = int(72 * scale)
+                        
+                        # Ensure PNG extension for emergency fallback too
+                        if not output_path.lower().endswith('.png'):
+                            output_path = output_path.rsplit('.', 1)[0] + '.png'
+                        
                         pil_image.save(output_path, "PNG", dpi=(actual_dpi, actual_dpi))
                         
                         print(f"Emergency extraction succeeded at {actual_dpi} DPI")

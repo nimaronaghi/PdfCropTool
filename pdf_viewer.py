@@ -1446,7 +1446,6 @@ class PDFViewerApp:
             initialfile=default_filename,
             filetypes=[
                 ("PNG files", "*.png"),
-                ("JPEG files", "*.jpg"),
                 ("All files", "*.*")
             ]
         )

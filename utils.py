@@ -199,7 +199,7 @@ def calculate_crop_dpi(crop_coords, zoom_level, target_pixels=1920):
 
 def get_supported_formats():
     """
-    Get list of supported export formats
+    Get list of supported export formats - PNG only for lossless quality preservation
     
     Returns:
         list: List of format dictionaries
@@ -208,20 +208,8 @@ def get_supported_formats():
         {
             'name': 'PNG (Lossless)',
             'extension': '.png',
-            'description': 'Best quality, larger file size',
+            'description': 'Preserves exact DPI and quality without compression artifacts',
             'mime_type': 'image/png'
-        },
-        {
-            'name': 'JPEG (High Quality)',
-            'extension': '.jpg',
-            'description': 'Good quality, smaller file size',
-            'mime_type': 'image/jpeg'
-        },
-        {
-            'name': 'TIFF (Uncompressed)',
-            'extension': '.tiff',
-            'description': 'Maximum quality, largest file size',
-            'mime_type': 'image/tiff'
         }
     ]
 

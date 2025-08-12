@@ -15,6 +15,7 @@ PDF Figure Extractor is a Windows desktop application designed to extract high-q
 - **Enhanced Crop Rejection**: When user rejects duplicate crop names, the crop is completely removed (drawing disappears) instead of auto-renaming
 - **Advanced Batch Export**: Interactive conflict resolution dialog where users can double-click to rename files directly before export
 - **Robust Scanned PDF Support**: Advanced detection system for scanned textbooks and PDFs where standard image detection fails, ensuring maximum DPI capture through multiple fallback methods
+- **PNG-Only Output Format**: Converted all image output to PNG format for lossless quality preservation while maintaining exact DPI accuracy
 
 ## User Preferences
 
