@@ -140,25 +140,14 @@ class ImageExtractor:
                 'source_quality': 'Maximum Available from PDF'
             }
             
-            # Calculate file size and apply intelligent size management
+            # Determine output format based on content and size
             file_size_mb = (pil_image.width * pil_image.height * 3) / (1024 * 1024)
             
-            # Apply file size safeguards while preserving quality
-            final_image, actual_dpi, size_info = self._apply_file_size_management(
-                pil_image, actual_dpi, file_size_mb, extraction_scale
-            )
-            
-            # Update metadata with size management info
-            metadata.update(size_info)
-            
-            # Determine output format based on content and final size
-            final_size_mb = (final_image.width * final_image.height * 3) / (1024 * 1024)
-            
-            if final_size_mb > 50:  # Large file, use JPEG with high quality
+            if file_size_mb > 50:  # If estimated size > 50MB, use JPEG with high quality
                 if not output_path.lower().endswith('.jpg') and not output_path.lower().endswith('.jpeg'):
                     output_path = output_path.rsplit('.', 1)[0] + '.jpg'
                 
-                final_image.save(
+                pil_image.save(
                     output_path,
                     "JPEG",
                     dpi=(actual_dpi, actual_dpi),
@@ -167,7 +156,7 @@ class ImageExtractor:
                 )
             else:
                 # Use PNG for smaller files to preserve quality
-                final_image.save(
+                pil_image.save(
                     output_path,
                     "PNG",
                     dpi=(actual_dpi, actual_dpi),
@@ -243,120 +232,6 @@ class ImageExtractor:
         except Exception as e:
             print(f"Emergency extraction failed: {e}")
             return None
-    
-    def _apply_file_size_management(self, pil_image, actual_dpi, estimated_size_mb, extraction_scale):
-        """
-        Apply intelligent file size management while preserving maximum quality
-        
-        Args:
-            pil_image: PIL Image object
-            actual_dpi: Current DPI of the image
-            estimated_size_mb: Estimated file size in MB
-            extraction_scale: Original extraction scale factor
-            
-        Returns:
-            tuple: (final_image, final_dpi, size_info_dict)
-        """
-        size_info = {
-            'original_estimated_size_mb': round(estimated_size_mb, 2),
-            'size_management_applied': False,
-            'reduction_method': None,
-            'final_estimated_size_mb': round(estimated_size_mb, 2)
-        }
-        
-        # Define size thresholds for different quality preservation strategies
-        EXTREME_SIZE_THRESHOLD = 500  # 500MB - extreme file size
-        LARGE_SIZE_THRESHOLD = 200    # 200MB - very large
-        MODERATE_SIZE_THRESHOLD = 100 # 100MB - moderately large
-        
-        try:
-            # No limits for reasonable sizes (under 100MB)
-            if estimated_size_mb <= MODERATE_SIZE_THRESHOLD:
-                print(f"File size acceptable: {estimated_size_mb:.1f}MB - no reduction needed")
-                return pil_image, actual_dpi, size_info
-            
-            # For larger files, apply intelligent reduction while preserving quality
-            original_width, original_height = pil_image.size
-            
-            if estimated_size_mb > EXTREME_SIZE_THRESHOLD:
-                # Extreme size - reduce to 300 DPI maximum but preserve aspect ratio
-                target_dpi = min(actual_dpi, 300)
-                reduction_factor = target_dpi / actual_dpi
-                size_info['reduction_method'] = f'Extreme size reduction: {actual_dpi} → {target_dpi} DPI'
-                
-            elif estimated_size_mb > LARGE_SIZE_THRESHOLD:
-                # Very large - reduce to 450 DPI maximum
-                target_dpi = min(actual_dpi, 450)
-                reduction_factor = target_dpi / actual_dpi
-                size_info['reduction_method'] = f'Large size reduction: {actual_dpi} → {target_dpi} DPI'
-                
-            else:
-                # Moderately large - reduce to 600 DPI maximum
-                target_dpi = min(actual_dpi, 600)
-                reduction_factor = target_dpi / actual_dpi
-                size_info['reduction_method'] = f'Moderate size reduction: {actual_dpi} → {target_dpi} DPI'
-            
-            # Apply reduction if needed
-            if reduction_factor < 1.0:
-                new_width = int(original_width * reduction_factor)
-                new_height = int(original_height * reduction_factor)
-                
-                # Ensure minimum viable dimensions
-                new_width = max(new_width, 100)
-                new_height = max(new_height, 100)
-                
-                # Use high-quality resampling
-                reduced_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
-                
-                # Calculate final size
-                final_size_mb = (new_width * new_height * 3) / (1024 * 1024)
-                
-                size_info.update({
-                    'size_management_applied': True,
-                    'final_estimated_size_mb': round(final_size_mb, 2),
-                    'final_dimensions': f'{new_width}x{new_height}',
-                    'original_dimensions': f'{original_width}x{original_height}',
-                    'reduction_factor': round(reduction_factor, 3)
-                })
-                
-                print(f"Size management applied: {estimated_size_mb:.1f}MB → {final_size_mb:.1f}MB")
-                print(f"DPI preserved at maximum practical level: {target_dpi}")
-                
-                return reduced_image, target_dpi, size_info
-            else:
-                # No reduction needed
-                return pil_image, actual_dpi, size_info
-                
-        except Exception as e:
-            print(f"Error in size management: {e}")
-            # Return original image if size management fails
-            return pil_image, actual_dpi, size_info
-    
-    def _estimate_final_file_size(self, width, height, format_type='PNG'):
-        """
-        Estimate final file size based on image dimensions and format
-        
-        Args:
-            width: Image width in pixels
-            height: Image height in pixels
-            format_type: 'PNG' or 'JPEG'
-            
-        Returns:
-            float: Estimated file size in MB
-        """
-        total_pixels = width * height
-        
-        if format_type.upper() == 'JPEG':
-            # JPEG compression estimates (quality 95)
-            bytes_per_pixel = 1.5  # High quality JPEG
-        else:
-            # PNG compression estimates
-            bytes_per_pixel = 3.2  # PNG with moderate compression
-        
-        estimated_bytes = total_pixels * bytes_per_pixel
-        estimated_mb = estimated_bytes / (1024 * 1024)
-        
-        return estimated_mb
             
     def _get_page_native_scale(self, page):
         """
