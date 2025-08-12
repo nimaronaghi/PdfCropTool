@@ -168,11 +168,75 @@ class ImageExtractor:
             
         except Exception as e:
             print(f"Error extracting crop: {str(e)}")
+            # Try emergency fallback for problematic content
+            try:
+                return self._emergency_extraction_fallback(crop_data, output_path)
+            except:
+                return None
+    
+    def _emergency_extraction_fallback(self, crop_data, output_path):
+        """
+        Emergency fallback extraction for problematic content
+        Uses multiple rendering strategies to ensure something gets extracted
+        """
+        try:
+            page_num = crop_data['page']
+            page = self.pdf_document[page_num]
+            
+            # Get coordinates
+            if 'pdf_coords' in crop_data:
+                pdf_left, pdf_top, pdf_right, pdf_bottom = crop_data['pdf_coords']
+            else:
+                coords = crop_data['coords']
+                display_zoom = crop_data['zoom']
+                display_render_scale = display_zoom * 2.0
+                pdf_left = coords[0] / display_render_scale
+                pdf_top = coords[1] / display_render_scale
+                pdf_right = coords[2] / display_render_scale
+                pdf_bottom = coords[3] / display_render_scale
+            
+            clip_rect = fitz.Rect(pdf_left, pdf_top, pdf_right, pdf_bottom)
+            
+            # Try multiple fallback scales
+            fallback_scales = [12.0, 8.0, 6.0, 4.0, 2.0]  # From high to low
+            
+            for scale in fallback_scales:
+                try:
+                    matrix = fitz.Matrix(scale, scale)
+                    pix = page.get_pixmap(matrix=matrix, clip=clip_rect)
+                    
+                    if pix and pix.width > 0 and pix.height > 0:
+                        # Convert to PIL and save
+                        img_data = pix.tobytes("ppm")
+                        pil_image = Image.open(io.BytesIO(img_data))
+                        
+                        actual_dpi = int(72 * scale)
+                        pil_image.save(output_path, "PNG", dpi=(actual_dpi, actual_dpi))
+                        
+                        print(f"Emergency extraction succeeded at {actual_dpi} DPI")
+                        
+                        return {
+                            'extraction_dpi': actual_dpi,
+                            'width_pixels': pil_image.width,
+                            'height_pixels': pil_image.height,
+                            'extraction_method': 'emergency_fallback',
+                            'fallback_scale': scale
+                        }
+                        
+                except Exception as e:
+                    print(f"Fallback scale {scale} failed: {e}")
+                    continue
+            
+            raise ValueError("All extraction methods failed")
+            
+        except Exception as e:
+            print(f"Emergency extraction failed: {e}")
             return None
             
     def _get_page_native_scale(self, page):
         """
         Determine the native scale factor for maximum quality extraction
+        Handles scanned PDFs and cases where get_images() fails to detect content
         
         Args:
             page: PyMuPDF page object
@@ -181,9 +245,10 @@ class ImageExtractor:
             float: Native scale factor for the page
         """
         try:
-            # Check for embedded images in the page to determine native resolution
+            # Method 1: Check for embedded images in the page
             image_list = page.get_images()
             max_scale = 4.0  # Default minimum scale for non-image content
+            images_detected = False
             
             if image_list:
                 # Analyze embedded images to find the highest resolution
@@ -209,18 +274,28 @@ class ImageExtractor:
                             # Use the exact scale factor for native DPI preservation
                             img_scale = max(scale_x, scale_y)
                             max_scale = max(max_scale, img_scale)
+                            images_detected = True
                             
                     except Exception:
                         continue
             
-            # Also consider text rendering quality - vector content can scale higher
-            # For vector content (text, drawings), we can use high scales
+            # Method 2: Fallback for scanned PDFs and cases where get_images() fails
+            if not images_detected or max_scale <= 4.0:
+                # Use advanced detection methods for scanned content
+                advanced_scale = self._detect_scanned_content_scale(page)
+                max_scale = max(max_scale, advanced_scale)
+            
+            # Method 3: Content analysis for vector/text quality
             text_objects = page.get_text("dict")
             has_text = len(text_objects.get("blocks", [])) > 0
             
-            if has_text and max_scale < 6.0:
-                # For pages with text but no high-res images, use moderate scaling
-                max_scale = 6.0  # 432 DPI for text
+            if has_text and max_scale < 8.0:
+                # For pages with text, ensure high quality rendering
+                max_scale = max(max_scale, 8.0)  # 576 DPI for crisp text
+            
+            # Method 4: Test rendering to determine optimal scale
+            optimal_scale = self._test_render_quality(page, max_scale)
+            max_scale = max(max_scale, optimal_scale)
             
             # NO CAP - preserve exact native resolution for accurate DPI
             # This is the main distinguishing feature of this app!
@@ -228,7 +303,90 @@ class ImageExtractor:
             
         except Exception as e:
             print(f"Error determining native scale: {e}")
-            return 4.0  # Default to 288 DPI
+            return 8.0  # Higher default for unknown content (576 DPI)
+    
+    def _detect_scanned_content_scale(self, page):
+        """
+        Advanced detection for scanned PDFs where get_images() might fail
+        Analyzes page characteristics to estimate optimal extraction scale
+        """
+        try:
+            # Method 1: Analyze page size and content density
+            page_rect = page.rect
+            page_area = page_rect.width * page_rect.height
+            
+            # Get all drawing commands (including image masks, form xobjects)
+            page_dict = page.get_text("dict")
+            
+            # Count text blocks and their density
+            text_blocks = page_dict.get("blocks", [])
+            text_density = len(text_blocks) / page_area if page_area > 0 else 0
+            
+            # Method 2: Check for form XObjects (common in scanned PDFs)
+            try:
+                page_xobjects = page.get_contents()
+                if page_xobjects and len(page_xobjects) > 0:
+                    # Scanned content often uses form XObjects
+                    # These typically need high resolution for clarity
+                    return 12.0  # 864 DPI for scanned content
+            except:
+                pass
+            
+            # Method 3: Analyze content type heuristics
+            if text_density < 0.001:
+                # Very low text density suggests image-heavy or scanned content
+                return 10.0  # 720 DPI for image-heavy pages
+            elif text_density < 0.01:
+                # Medium text density, could be mixed content
+                return 8.0   # 576 DPI for mixed content
+            else:
+                # High text density, likely text-based
+                return 6.0   # 432 DPI for text-based content
+                
+        except Exception as e:
+            print(f"Error in scanned content detection: {e}")
+            return 8.0  # Safe default
+    
+    def _test_render_quality(self, page, current_scale):
+        """
+        Test render at different scales to find optimal quality
+        Especially useful for scanned content where metadata is unreliable
+        """
+        try:
+            # Test scales to evaluate
+            test_scales = [current_scale, current_scale * 1.5, current_scale * 2.0]
+            
+            # Small test area (top-left corner)
+            test_rect = fitz.Rect(0, 0, min(100, page.rect.width), min(100, page.rect.height))
+            
+            best_scale = current_scale
+            
+            for scale in test_scales:
+                try:
+                    # Quick test render
+                    matrix = fitz.Matrix(scale, scale)
+                    test_pix = page.get_pixmap(matrix=matrix, clip=test_rect)
+                    
+                    if test_pix and test_pix.width > 0 and test_pix.height > 0:
+                        # Check if this scale provides meaningful additional detail
+                        pixel_density = (test_pix.width * test_pix.height) / (test_rect.width * test_rect.height)
+                        
+                        # If we get significantly more pixels, it suggests the content can benefit from higher resolution
+                        if pixel_density > (current_scale * current_scale * 1.2):
+                            best_scale = scale
+                    
+                    # Clean up test pixmap
+                    test_pix = None
+                    
+                except Exception:
+                    # If rendering fails at this scale, stick with current
+                    break
+            
+            return best_scale
+            
+        except Exception as e:
+            print(f"Error in quality testing: {e}")
+            return current_scale
             
     def get_crop_preview_info(self, crop_data):
         """
