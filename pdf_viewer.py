@@ -28,12 +28,12 @@ class PDFViewerApp:
         self.pdf_images = []  # Cache for rendered pages
         self.crop_selections = []  # List of crop selections
         self.output_directory = ""
-        self.naming_pattern = "Q{:04d}"
+        self.naming_pattern = "Q{:02d}"
         self.use_sequential_naming = False
         
         # Adaptive naming system
         self.learned_naming_prefix = ""  # Learned prefix from user renaming (e.g., "nima_")
-        self.learned_naming_pattern = ""  # Full learned pattern (e.g., "nima_Q{:04d}")
+        self.learned_naming_pattern = ""  # Full learned pattern (e.g., "nima_Q{:02d}")
         self.naming_learning_enabled = True
         
         # Continuous scrolling system
@@ -1189,7 +1189,7 @@ class PDFViewerApp:
                     if 'custom_name' in crop and crop['custom_name']:
                         filename = crop['custom_name']
                     else:
-                        filename = f"crop_{i + 1:04d}"
+                        filename = f"crop_{i + 1:02d}"
                     if not filename.endswith('.png'):
                         filename += '.png'
                     
@@ -1682,11 +1682,21 @@ class PDFViewerApp:
             # Update PDF info
             self.update_pdf_info_from_url(url, temp_path)
             
-            # Render first page
-            self.render_current_page()
+            # Clear and update crop list UI
+            self.crop_frame.update_crop_list([])
+            
+            # Initialize view mode
+            if self.continuous_mode:
+                self.render_continuous_pages()
+            else:
+                self.render_current_page()
             
             # Update navigation
             self.update_navigation()
+            
+            # Auto-highlight visualization keywords
+            if hasattr(self, 'viz_highlight_var'):
+                self.highlight_visualization_keywords()
             
         except Exception as e:
             self.progress_bar.stop()
@@ -1798,7 +1808,7 @@ class PDFViewerApp:
         # Count existing crops to get next number
         crop_count = len(self.crop_selections) + 1
         
-        return f"{pdf_name}_Q{crop_count:04d}"
+        return f"{pdf_name}_Q{crop_count:02d}"
     
     def get_adaptive_crop_name(self):
         """Generate adaptive crop name based on learned patterns from user renames"""
@@ -1818,7 +1828,7 @@ class PDFViewerApp:
         
         # If we have a learned prefix, use it with Q pattern
         if self.learned_naming_prefix:
-            return f"{self.learned_naming_prefix}Q{crop_count:04d}"
+            return f"{self.learned_naming_prefix}Q{crop_count:02d}"
         
         # Fallback to default naming
         return self.get_default_crop_name()
@@ -1854,7 +1864,7 @@ class PDFViewerApp:
                 return {
                     'prefix': new_name + "_Q",
                     'suffix': "",
-                    'full_pattern': new_name + "_Q{:04d}"
+                    'full_pattern': new_name + "_Q{:02d}"
                 }
             return None
         
@@ -1901,7 +1911,7 @@ class PDFViewerApp:
             num_format = f"{{:0{len(new_num_in_name)}d}}"
         else:
             # Use 4-digit zero padding as default
-            num_format = "{:04d}"
+            num_format = "{:02d}"
         
         return {
             'prefix': new_str_before_num,
@@ -1943,5 +1953,5 @@ class PDFViewerApp:
         
         # Simple heuristic: if it contains Q followed by the expected number, it's likely default
         import re
-        pattern = f"Q{expected_number:04d}"
+        pattern = f"Q{expected_number:02d}"
         return pattern in name

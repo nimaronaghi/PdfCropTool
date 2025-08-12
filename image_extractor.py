@@ -46,9 +46,9 @@ class ImageExtractor:
             # First, check if the page has embedded images to determine native resolution
             native_scale = self._get_page_native_scale(page)
             
-            # Use reasonable scale based on native content but cap for file size
-            # For most figures, 300-600 DPI is more than sufficient
-            extraction_scale = max(min(native_scale, 8.0), 4.0)  # Between 4x-8x scale (288-576 DPI)
+            # Use EXACT native scale for true DPI preservation - this is the main feature!
+            # No caps or limits - preserve the exact quality of the source
+            extraction_scale = native_scale
             
             # Get actual output dimensions for verification
             crop_width = coords[2] - coords[0]  # in display pixels
@@ -97,8 +97,8 @@ class ImageExtractor:
                 print(f"Primary rendering failed: {render_error}")
                 print(f"Trying fallback rendering method...")
                 
-                # Try with a simpler matrix
-                simple_matrix = fitz.Matrix(4.0, 4.0)  # Fixed 288 DPI
+                # Try with a moderate fallback resolution
+                simple_matrix = fitz.Matrix(6.0, 6.0)  # Fixed 432 DPI for fallback
                 pix = page.get_pixmap(matrix=simple_matrix, clip=clip_rect)
                 
                 if pix.width == 0 or pix.height == 0:
@@ -183,7 +183,7 @@ class ImageExtractor:
         try:
             # Check for embedded images in the page to determine native resolution
             image_list = page.get_images()
-            max_scale = 2.0  # Default minimum scale
+            max_scale = 4.0  # Default minimum scale for non-image content
             
             if image_list:
                 # Analyze embedded images to find the highest resolution
@@ -199,14 +199,14 @@ class ImageExtractor:
                         # Get image placement on page
                         img_dict = page.get_image_bbox(img)
                         if img_dict:
-                            # Calculate the scale needed to match native image resolution
+                            # Calculate the EXACT scale needed to match native image resolution
                             page_width = img_dict.width
                             page_height = img_dict.height
                             
                             scale_x = img_width / page_width if page_width > 0 else 1.0
                             scale_y = img_height / page_height if page_height > 0 else 1.0
                             
-                            # Use the higher scale factor
+                            # Use the exact scale factor for native DPI preservation
                             img_scale = max(scale_x, scale_y)
                             max_scale = max(max_scale, img_scale)
                             
@@ -218,12 +218,13 @@ class ImageExtractor:
             text_objects = page.get_text("dict")
             has_text = len(text_objects.get("blocks", [])) > 0
             
-            if has_text:
-                # For pages with text, use moderate scaling for readability
-                max_scale = max(max_scale, 6.0)  # Up to 432 DPI for text
+            if has_text and max_scale < 6.0:
+                # For pages with text but no high-res images, use moderate scaling
+                max_scale = 6.0  # 432 DPI for text
             
-            # Cap at reasonable maximum to avoid huge files
-            return min(max_scale, 8.0)  # Max 576 DPI for reasonable file sizes
+            # NO CAP - preserve exact native resolution for accurate DPI
+            # This is the main distinguishing feature of this app!
+            return max_scale  # Return exact native scale without any limits
             
         except Exception as e:
             print(f"Error determining native scale: {e}")
@@ -248,7 +249,7 @@ class ImageExtractor:
             
             # Calculate what the extraction parameters would be using native resolution
             native_scale = self._get_page_native_scale(page)
-            extraction_scale = max(native_scale, 4.0)
+            extraction_scale = native_scale  # Use exact native scale
             
             # Use pre-calculated PDF coordinates if available (new format)
             if 'pdf_coords' in crop_data:

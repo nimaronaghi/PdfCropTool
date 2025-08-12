@@ -225,6 +225,41 @@ class CropFrame(ttk.LabelFrame):
             # Fallback to direct save
             self.app.save_individual_crop(crop_index)
             
+    def get_smart_default_name(self, crop_index):
+        """Get smart default name based on previous crop's name with incremented last digit"""
+        if crop_index == 0 or not self.app.crop_selections:
+            return None
+            
+        # Get the previous crop name (the one before the current crop being named)
+        prev_index = crop_index - 1
+        if prev_index >= 0 and prev_index < len(self.app.crop_selections):
+            prev_crop = self.app.crop_selections[prev_index]
+            prev_name = prev_crop.get('custom_name', '')
+            
+            if prev_name:
+                import re
+                # Find the last number in the name
+                # This pattern finds all numbers in the name
+                numbers = re.findall(r'\d+', prev_name)
+                
+                if numbers:
+                    # Get the last number and increment it
+                    last_number = numbers[-1]
+                    new_number = str(int(last_number) + 1)
+                    
+                    # Preserve zero padding if present
+                    if len(last_number) > 1 and last_number[0] == '0':
+                        new_number = new_number.zfill(len(last_number))
+                    
+                    # Replace the last occurrence of the number with the new one
+                    # Find the last occurrence position
+                    last_pos = prev_name.rfind(last_number)
+                    if last_pos != -1:
+                        new_name = prev_name[:last_pos] + new_number + prev_name[last_pos + len(last_number):]
+                        return new_name
+        
+        return None
+            
     def rename_selected_crop(self):
         """Rename the currently selected crop"""
         selection = self.crop_listbox.curselection()
@@ -236,7 +271,7 @@ class CropFrame(ttk.LabelFrame):
     def show_rename_dialog(self, crop_index):
         """Show streamlined rename dialog with improved UX"""
         crop = self.app.crop_selections[crop_index]
-        current_name = crop.get('custom_name', f"crop_{crop_index + 1:04d}")
+        current_name = crop.get('custom_name', f"crop_{crop_index + 1:02d}")
         
         # Create compact rename dialog
         dialog = tk.Toplevel(self.app.root)
@@ -258,7 +293,15 @@ class CropFrame(ttk.LabelFrame):
         
         ttk.Label(main_frame, text=f"Crop #{crop_index + 1} name:").pack(anchor=tk.W, pady=(0, 5))
         
-        name_var = tk.StringVar(value=current_name)
+        # Get smart default name for new crops
+        smart_default_name = self.get_smart_default_name(crop_index)
+        initial_value = current_name
+        
+        # Use smart default if this is a new crop being named
+        if crop_index == len(self.app.crop_selections) - 1 and smart_default_name:
+            initial_value = smart_default_name
+        
+        name_var = tk.StringVar(value=initial_value)
         name_entry = ttk.Entry(main_frame, textvariable=name_var, width=40, font=("TkDefaultFont", 10))
         name_entry.pack(fill=tk.X, pady=(0, 10))
         
@@ -373,7 +416,7 @@ class NamingFrame(ttk.LabelFrame):
         # Pattern input
         ttk.Label(self, text="Naming Pattern:").pack(anchor=tk.W)
         
-        self.pattern_var = tk.StringVar(value="Q{:04d}")
+        self.pattern_var = tk.StringVar(value="Q{:02d}")
         self.pattern_entry = ttk.Entry(self, textvariable=self.pattern_var, width=20)
         self.pattern_entry.pack(fill=tk.X, pady=(2, 5))
         
@@ -391,9 +434,9 @@ class NamingFrame(ttk.LabelFrame):
         preset_frame.pack(fill=tk.X, pady=(5, 0))
         
         presets = [
-            ("Q0001", "Q{:04d}"),
-            ("A0001", "A{:04d}"),
-            ("H0001", "H{:04d}")
+            ("Q01", "Q{:02d}"),
+            ("A01", "A{:02d}"),
+            ("H01", "H{:02d}")
         ]
         
         for i, (label, pattern) in enumerate(presets):
@@ -412,7 +455,7 @@ class NamingFrame(ttk.LabelFrame):
         self.sequential_check.pack(anchor=tk.W, pady=(0, 5))
         
         # Help text
-        help_text = ("Templates: Q{:04d}, A{:04d}, H{:04d} for standard naming.\n"
+        help_text = ("Templates: Q{:02d}, A{:02d}, H{:02d} for standard naming.\n"
                     "Uncheck sequential naming to use individual crop names.")
         ttk.Label(self, text=help_text, font=("Arial", 8), 
                  foreground="gray", wraplength=200, justify=tk.LEFT).pack(pady=(5, 0))
